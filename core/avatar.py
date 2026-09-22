@@ -71,6 +71,24 @@ _TAU_SHUT = 0.012     # lips closing on a consonant, mid-word
 _TAU_REST = 0.055     # settling back to rest after speech ends
 _TAU_SHAPE = 0.018    # viseme openness following the schedule
 
+# Samia's visual identity. The mesh remains untouched: these values only affect
+# the treatment applied to it by the software renderer.
+DEFAULT_PALETTE = {
+    "background": "#07111f",
+    "primary": "#63e6ff",
+    "accent": "#a78bfa",
+    "highlight": "#d9f7ff",
+}
+DEFAULT_EXPRESSION = "neutral"
+DEFAULT_LIGHTING = {
+    "ambient": 0.22,
+    "rim": 0.24,
+    "key": 0.70,
+    "key_x": -0.55,
+    "key_y": 0.50,
+    "key_z": 0.52,
+}
+
 # Only the microphone path needs a level floor: it has one coarse RMS and no way
 # to tell speech from room tone. JARVIS's own voice arrives as a per-20 ms
 # schedule whose silences are already silent, so it needs no floor and must not
@@ -123,6 +141,7 @@ class HoloAvatar:
     # Look: True paints a lit, solid head with a wireframe over it; False is a
     # see-through glass wireframe. Flip here, or per instance.
     shaded = True
+    default_expression = DEFAULT_EXPRESSION
 
     def __init__(self) -> None:
         mesh = get_head_mesh()
@@ -546,8 +565,11 @@ class HoloAvatar:
         # light leans off-axis on purpose: weight it towards the camera and
         # every front-facing facet returns the same value, which is a flat mask.
         fres = np.clip(1.0 - nz, 0.0, 2.0) ** 1.7
-        lam = np.clip(fn[:, 0] * -0.55 + fn[:, 1] * 0.50 + nz * 0.52, 0.0, 1.0)
-        bright = 0.26 + 0.20 * fres + 0.66 * lam ** 1.05
+        light = DEFAULT_LIGHTING
+        lam = np.clip(fn[:, 0] * light["key_x"]
+                  + fn[:, 1] * light["key_y"]
+                  + nz * light["key_z"], 0.0, 1.0)
+        bright = light["ambient"] + light["rim"] * fres + light["key"] * lam ** 1.05
         bright *= (self._fade[a][vis] + self._fade[b][vis] + self._fade[c][vis]) / 3.0
         bright *= 0.88 + 0.24 * amp
 
