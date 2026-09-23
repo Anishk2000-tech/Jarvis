@@ -59,7 +59,7 @@ def _read_full_config() -> dict:
 
 # Single source of truth for the release name — the window title, the header
 # badge and the readme must never disagree again.
-APP_VERSION  = "MARK LIV"
+APP_VERSION  = "SAMIA"
 APP_PROTOCOL = APP_VERSION.split()[-1]
 
 _DEFAULT_W, _DEFAULT_H = 980, 700
@@ -71,23 +71,23 @@ _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
 
 class C:
-    BG        = "#00060a"
-    PANEL     = "#010d14"
-    PANEL2    = "#010f18"
-    BORDER    = "#0d3347"
-    BORDER_B  = "#1a5c7a"
-    BORDER_A  = "#0f4060"
-    PRI       = "#00d4ff"
-    PRI_DIM   = "#007a99"
-    PRI_GHO   = "#001f2e"
-    ACC       = "#ff6b00"
-    ACC2      = "#ffcc00"
+    BG        = "#07111f"
+    PANEL     = "#0a1728"
+    PANEL2    = "#0d1d33"
+    BORDER    = "#163b5c"
+    BORDER_B  = "#27638b"
+    BORDER_A  = "#254b78"
+    PRI       = "#63e6ff"
+    PRI_DIM   = "#238aa8"
+    PRI_GHO   = "#102e4b"
+    ACC       = "#a78bfa"
+    ACC2      = "#d8b4fe"
     GREEN     = "#00ff88"
     GREEN_D   = "#00aa55"
     RED       = "#ff3355"
     MUTED_C   = "#ff3366"
-    TEXT      = "#8ffcff"
-    TEXT_DIM  = "#3a8a9a"
+    TEXT      = "#d9f7ff"
+    TEXT_DIM  = "#74a9c4"
     TEXT_MED  = "#5ab8cc"
     WHITE     = "#d8f8ff"
     DARK      = "#000d14"
