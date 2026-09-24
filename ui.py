@@ -122,7 +122,9 @@ def tech_font(size: int, weight: QFont.Weight = QFont.Weight.Normal, letter_spac
     f.setWeight(weight)
     f.setStyleHint(QFont.StyleHint.SansSerif)
     if letter_spacing is not None:
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+        # Normalize legacy integer tracking (e.g. 50 -> 1.0px, 30 -> 0.6px) vs explicit pixel values (0.5px - 2.0px)
+        spacing = letter_spacing / 50.0 if letter_spacing > 5.0 else letter_spacing
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
     return f
 
 
@@ -133,7 +135,8 @@ def mono_font(size: int, weight: QFont.Weight = QFont.Weight.Normal, letter_spac
     f.setWeight(weight)
     f.setStyleHint(QFont.StyleHint.Monospace)
     if letter_spacing is not None:
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, letter_spacing)
+        spacing = letter_spacing / 50.0 if letter_spacing > 5.0 else letter_spacing
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
     return f
 
 
@@ -1792,7 +1795,7 @@ class CustomizeOverlay(QWidget):
     """Floating overlay — change assistant name, user name, UI colour and voice."""
 
     saved = pyqtSignal(str, str, str, str)   # assistant_name, user_name, ui_color, voice
-    _OW, _OH = 400, 588
+    _OW, _OH = 430, 610
 
     def __init__(self, assistant_name="JARVIS", user_name="",
                  ui_color=DEFAULT_UI_COLOR, voice="", parent=None):
@@ -1809,19 +1812,19 @@ class CustomizeOverlay(QWidget):
         lay.setContentsMargins(24, 20, 24, 20)
         lay.setSpacing(9)
 
-        def _lbl(txt, fs=9, bold=False, color=C.PRI, align=Qt.AlignmentFlag.AlignCenter):
+        def _lbl(txt, fs=8, bold=False, color=C.PRI, align=Qt.AlignmentFlag.AlignLeft):
             w = QLabel(txt); w.setAlignment(align)
             w.setFont(tech_font(fs,
                                 QFont.Weight.Bold if bold else QFont.Weight.Medium,
-                                50 if bold else 20))
+                                letter_spacing=0.8 if bold else 0.3))
             w.setStyleSheet(f"color: {color}; background: transparent;")
             return w
 
         _fs = (f"QLineEdit {{ background: rgba(255, 255, 255, 0.05); color: {C.WHITE}; "
-               f"border: 1px solid rgba(0, 240, 255, 0.20); border-radius: 9px; padding: 6px 12px; }}"
+               f"border: 1px solid rgba(0, 240, 255, 0.20); border-radius: 9px; padding: 6px 12px; font-size: 13px; }}"
                f"QLineEdit:focus {{ border: 1px solid {C.PRI}; background: rgba(0, 240, 255, 0.08); }}")
 
-        lay.addWidget(_lbl("⚙  CUSTOMISE NEURAL CORE", 12, True))
+        lay.addWidget(_lbl("⚙  CUSTOMISE NEURAL CORE", 11, bold=True, color=C.PRI, align=Qt.AlignmentFlag.AlignCenter))
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: rgba(0, 240, 255, 0.15); margin: 2px 0;")
         lay.addWidget(sep)
@@ -1829,17 +1832,17 @@ class CustomizeOverlay(QWidget):
         lay.addWidget(_lbl("ASSISTANT CODENAME", 8, bold=True, color=C.TEXT_DIM,
                             align=Qt.AlignmentFlag.AlignLeft))
         self._name_input = QLineEdit(assistant_name)
-        self._name_input.setFont(tech_font(10, QFont.Weight.Bold, 40))
+        self._name_input.setFont(tech_font(10, QFont.Weight.SemiBold if hasattr(QFont.Weight, "SemiBold") else QFont.Weight.DemiBold, letter_spacing=0.5))
         self._name_input.setFixedHeight(34)
         self._name_input.setStyleSheet(_fs)
         lay.addWidget(self._name_input)
 
         lay.addSpacing(4)
-        lay.addWidget(_lbl("COMMANDER DESIGNATION  (blank for default sir / efendim)", 8,
+        lay.addWidget(_lbl("COMMANDER DESIGNATION  (blank for default sir)", 8,
                             bold=True, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         self._user_input = QLineEdit(user_name)
         self._user_input.setPlaceholderText("e.g.  Tony   (leave blank for auto)")
-        self._user_input.setFont(tech_font(10))
+        self._user_input.setFont(tech_font(10, letter_spacing=0.3))
         self._user_input.setFixedHeight(34)
         self._user_input.setStyleSheet(_fs)
         lay.addWidget(self._user_input)
@@ -1858,7 +1861,7 @@ class CustomizeOverlay(QWidget):
             b = QPushButton(_v)
             b.setCheckable(True)
             b.setFixedHeight(30)
-            b.setFont(tech_font(8, QFont.Weight.Bold, 30))
+            b.setFont(tech_font(8, QFont.Weight.Bold, letter_spacing=0.4))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.clicked.connect(lambda _=False, name=_v: self._on_voice_pick(name))
             self._voice_btns[_v] = b
@@ -1874,7 +1877,7 @@ class CustomizeOverlay(QWidget):
         clr_hdr.addStretch()
         df_btn = QPushButton("DEFAULT")
         df_btn.setFixedSize(72, 22)
-        df_btn.setFont(tech_font(7, QFont.Weight.Bold, 40))
+        df_btn.setFont(tech_font(7, QFont.Weight.Bold, letter_spacing=0.5))
         df_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         df_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1911,7 +1914,7 @@ class CustomizeOverlay(QWidget):
 
         save_btn = QPushButton("▸  APPLY CHANGES")
         save_btn.setFixedHeight(36)
-        save_btn.setFont(tech_font(9, QFont.Weight.Bold, 50))
+        save_btn.setFont(tech_font(9, QFont.Weight.Bold, letter_spacing=0.8))
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1932,7 +1935,7 @@ class CustomizeOverlay(QWidget):
 
         cancel_btn = QPushButton("CANCEL")
         cancel_btn.setFixedHeight(36)
-        cancel_btn.setFont(tech_font(9, QFont.Weight.Medium))
+        cancel_btn.setFont(tech_font(9, QFont.Weight.Medium, letter_spacing=0.5))
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet(f"""
             QPushButton {{
