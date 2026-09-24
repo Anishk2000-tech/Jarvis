@@ -260,6 +260,60 @@ It is held in memory only, deliberately: writing it to disk would make a fresh l
 
 ---
 
+## 🎮 Minecraft (experimental)
+
+JARVIS can observe and play Minecraft Java Edition, inside a bounded, revocable session.
+
+**How much it can see depends on one optional mod.** `mods/markliv-bridge-1.0.0.jar` is a small **read-only** Fabric mod: it publishes client state to one JSON file and accepts nothing back. It is not a command channel, and it cannot be turned into one — it has no input path at all. Install it with `install_mod.bat`.
+
+| | Without the mod | With the mod |
+|---|---|---|
+| Position, facing | F3 overlay via OCR, if Tesseract is installed | exact, every tick |
+| Block you are aiming at | F3 overlay via OCR | exact |
+| Inventory, health, hunger | not readable | exact |
+| **The terrain around you** | **not readable** | **surface heights within 10 blocks** |
+| **Nearby blocks and mobs** | **not readable** | **with coordinates and categories** |
+| Finding a tree | sweep the crosshair and hope | look it up and walk there |
+
+**What it can do now.** Walk, turn, jump, sneak, sprint, select a hotbar slot, mine, place, interact, eat, drop, open the inventory. Run bounded multi-step tasks that observe and **verify** between every step: `walk_forward`, `survey`, `find_block`, `break_block`, `place_block`, `collect_logs`, `navigate_to`.
+
+**Navigation.** With the mod running, `navigate_to` reads the terrain scan, runs A\* over it, and walks the route. The player is modelled as a body, not a point: 0.6 blocks wide, two blocks tall, stepping up only 0.6 of a block (a slab) without jumping. The mod reports the headroom above every column, so a route under a low branch or a one-block ledge is refused rather than walked into. Where the route steps up a full block it walks **and** jumps in one action (`move_and_jump`) — the only way onto a ledge in Minecraft. Straight stretches become single long strides; near obstacles the strides are short. `look_around` answers "what is near me" in a sentence with coordinates.
+
+**When it gets stuck, it says why.** Eight kinds, each with its own recovery: a one-block step (hop), a wall or low ceiling (re-route), a mob in the way (go round it), unscanned ground (look again), a route over changed ground (re-plan), no route at all, input not landing (open ground and no movement — usually focus), and aiming that will not converge.
+
+**It measures your mouse.** The mod reports Minecraft's sensitivity slider and `minecraft/aiming.py` computes the exact pixels-per-degree from it. Only the *direction* of each axis is still observed, because nothing reports it. Aiming is closed-loop: correct, observe the real rotation, correct again.
+
+**Mining.** It holds attack only when the mod confirms the crosshair is on the exact block it means — a leaf in front of a log is never swung at. The hold length comes from Minecraft's own break-time formula (block hardness, tool, whether you are on the ground), and it lets go the moment the block goes. Success means that exact coordinate changed with the camera held still — or, when the inventory is readable, that the item arrived.
+
+**Perception.** The mod is authoritative. When it cannot say, a colour/texture classifier gives a *labelled guess* — `visual_high_confidence` or `visual_low_confidence` — which can steer the camera but can never authorise breaking anything.
+
+**Verification is the point.** "I held the attack button" and "the block broke" are different answers, and the system reports them separately. A swing that lands on an unbroken log is recorded as delivered-but-failed, not as success. When it cannot see the target at all, it says `unverifiable` rather than guessing either way. Evidence is ranked: the inventory beats a block vanishing from the scan, which beats the crosshair changing — and the result says which one it used.
+
+**What it deliberately cannot do.** Type in chat. Run slash commands — `minecraft.command` is `DENY` permanently. Launch the game. Touch anything outside the Minecraft window. Dig through or bridge over an obstacle. Walk anywhere it cannot currently see.
+
+**The safety boundary.** The subsystem cannot start a process, reach the shell, open a browser, send a message, or write a file — `tests/test_minecraft_boundary.py` parses every module and fails the build if that changes. `minecraft/navigation.py` imports nothing but `heapq`, `math` and `dataclasses`, and that is asserted from the import graph rather than from its docstring. Input is limited to a fixed table of keys and two mouse buttons; there is no function anywhere that takes a keycode. Everything held is recorded before it is pressed and released by a single `release_all()` reachable from five independent stops: focus loss (checked every 40ms), F12, a deadman timer, session expiry, and the game closing.
+
+**Consent: one confirmation, for the whole session.** You approve once, and that covers every gameplay action until you stop it — there is no per-swing dialog, on purpose, because a prompt per swing is how people learn to dismiss prompts unread. The grant is set membership, not a name prefix, so a capability added to `minecraft.*` later is *not* covered by an old approval. Chat, slash commands and launching the game are outside it permanently, and nothing the model can call grants itself the session.
+
+**Requires Windows** for input (Linux and macOS can observe but not control) and Minecraft in windowed or borderless mode. OCR is only needed if you are *not* running the bridge mod.
+
+Test it against a real game with a throwaway creative world:
+
+```bat
+py tools\minecraft_manual_check.py
+```
+
+It is interactive and never autonomous: it says what it is about to do, waits, does one bounded thing, and asks what you saw. That one covers the raw input plumbing. For gameplay — aiming, mining with coordinate and inventory proof, hopping a step, going round a wall, safety stops and guided voice checks — run:
+
+```bat
+gameplay_check.bat
+gameplay_check.bat C      &:: just the mining section
+```
+
+**Voice diagnostics.** Type `voice check` in the HUD text box to see where your speech is going: frames captured, held back by a gate (and which one), queued, **dropped**, sent, transcribed, answered. If an utterance vanishes, JARVIS logs `VOICE_PIPELINE_LOST_INPUT` naming the stage it died at, or `VOICE_HEARD_BUT_UNANSWERED` when Gemini transcribed it and did nothing. Set `"voice_debug": true` in `config/api_keys.json` for a one-line summary after every turn. Proactive audio is now **off by default**; `"proactive_audio": true` restores it.
+
+---
+
 ## 🗺️ Mark Roadmap
 
 | Mark | Focus |
@@ -288,6 +342,27 @@ python main.py
 
 > ⚠️ **Installation Note:** If you hit a `ModuleNotFoundError` for an OS-specific package, install it with `pip install <module_name>`. The optional **wake word** engine is *not* installed here — grab it in one click from **⚙ → WAKE WORD** inside the app.
 
+### On Windows: use `run_jarvis.bat`
+
+Double-click **`run_jarvis.bat`** instead of `main.py`.
+
+Double-clicking a `.py` file opens a console, runs it, and closes that console the instant the process exits. If Python exits because of an uncaught exception, the traceback is printed into a window that has already closed — all you see is a flash. That is the single most common "it doesn't work" report, and it is a reporting problem, not a bug in the app.
+
+`run_jarvis.bat` fixes it properly. It finds a supported interpreter, sets the working directory, installs the dependencies if they are missing, and — if the app exits with an error — runs the doctor and holds the window open so the reason can actually be read.
+
+### When it closes instantly anyway
+
+Run the doctor:
+
+```bat
+py tools\doctor.py
+```
+
+It imports what `main.py` imports, in the same order, and reports the first thing that fails with the real error and the command that fixes it. It distinguishes a package that is *absent* (install it) from one that is *present but will not load* (a broken install or a missing Visual C++ runtime — re-running pip will not help). It also verifies the checkout is complete, that `config/` is writable, and that you are launching from the right directory.
+
+The doctor never reads or prints your API key — only whether one is saved.
+
+
 ---
 
 ## 📋 Requirements
@@ -295,12 +370,24 @@ python main.py
 | Requirement | Details |
 | --- | --- |
 | **OS** | Windows 10/11, macOS, or Linux |
-| **Python** | 3.11, 3.12 or 3.13 |
+| **Python** | 3.11, 3.12, 3.13 or 3.14 |
 | **Microphone** | Required for voice interaction (and for the "Hey Jarvis" wake word) |
 | **Speakers** | Required for voice replies |
 | **API Key** | Free Gemini API key (entered on first launch → `config/api_keys.json`) |
 | **GPU** | **Not required.** The avatar is rendered in software |
 | **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, a few MB, fully local) |
+
+> **Python 3.14** is supported. The test suite runs green on 3.11, 3.12, 3.13
+> and 3.14, and every dependency in `requirements.txt` — including PyQt6,
+> numpy, OpenCV, cryptography, Playwright and `google-genai` — resolves to a
+> real 3.14 wheel. On Windows, `pywin32` ships `cp314` builds and the other
+> Windows-only extras are pure Python.
+>
+> `tests/test_python_compatibility.py` keeps this honest: it re-checks syntax,
+> removed and deprecated standard-library modules, and the asyncio patterns
+> that change between versions, against whichever interpreter is running the
+> tests. It cannot check that third-party wheels exist for a *future* Python —
+> that stays a manual step before declaring support for one.
 
 ---
 
