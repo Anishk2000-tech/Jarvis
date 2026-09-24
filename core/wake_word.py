@@ -1,5 +1,5 @@
 """
-Local wake-word detection for JARVIS ("Hey Jarvis").
+Local wake-word detection for Samia ("Hey Samia").
 
 Design goals:
   • ZERO cost when the feature is off — openwakeword is imported ONLY inside
@@ -13,19 +13,23 @@ Design goals:
     network call except the one-time model download the user triggers from the UI.
 
 openwakeword ships small ONNX models (a few MB each) and runs comfortably on a
-CPU. The pretrained wake phrase used here is "Hey Jarvis".
+CPU. The human-facing phrase defaults to "Hey Samia". The bundled model remains
+the compatibility fallback; use a matching custom model for actual detection.
 """
 from __future__ import annotations
 
 import queue
+import os
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Callable
 
-# Pretrained openwakeword model that listens for "Hey Jarvis".
-WAKE_MODEL = "hey_jarvis"
+# Human-facing phrase and model are configurable. The stock model is retained
+# until a matching custom openWakeWord or Porcupine model is supplied.
+WAKE_PHRASE = os.getenv("WAKE_PHRASE", "Hey Samia").strip() or "Hey Samia"
+WAKE_MODEL = os.getenv("OPENWAKEWORD_MODEL", "hey_jarvis")
 # Score in [0,1]; above this counts as a detection. Tunable per environment.
 DEFAULT_THRESHOLD = 0.5
 # Mic frames arrive at 16 kHz int16; this is just the detector's input rate.
@@ -146,7 +150,7 @@ class WakeWordDetector:
         self._ready = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name="WakeWordThread")
         self._thread.start()
-        self._logger("Wake word: listening for 'Hey Jarvis'.")
+        self._logger(f"Wake word: listening for '{WAKE_PHRASE}'.")
         return True
 
     def stop(self) -> None:
