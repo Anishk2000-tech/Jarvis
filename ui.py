@@ -30,7 +30,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
-    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
+    QStackedWidget, QTextBrowser, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
 )
 
 # Qt6 enum compatibility alias: SemiBold -> DemiBold
@@ -1248,6 +1248,257 @@ class LogWidget(QTextEdit):
             self.ensureCursorVisible()
             QTimer.singleShot(20, self._next)
 
+
+class NotesTerminalWidget(QWidget):
+    """
+    Dedicated terminal view exclusively for notes, links, code snippets,
+    and structured intelligence provided by Alfred.
+    Keeps URLs and research distinct from the conversational chat stream.
+    Features clickable links, copy-all, clear, and persistence.
+    """
+    note_added = pyqtSignal(int)  # emits updated count
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._notes_file = CONFIG_DIR / "intel_notes.json"
+        self._notes: list[dict] = []
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        # Top control bar
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(4, 2, 4, 2)
+        top_bar.setSpacing(6)
+
+        self._count_lbl = QLabel("0 ENTRIES")
+        self._count_lbl.setFont(mono_font(8, QFont.Weight.Bold, letter_spacing=0.8))
+        self._count_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        top_bar.addWidget(self._count_lbl)
+        top_bar.addStretch()
+
+        _BTN_SM = f"""
+            QPushButton {{
+                background: rgba(255, 255, 255, 0.04);
+                color: {C.TEXT_MED};
+                border: 1px solid rgba(0, 240, 255, 0.15);
+                border-radius: 5px;
+                padding: 2px 8px;
+            }}
+            QPushButton:hover {{
+                background: rgba(0, 240, 255, 0.15);
+                color: #ffffff;
+                border-color: {C.PRI};
+            }}
+            QPushButton:pressed {{
+                background: rgba(0, 240, 255, 0.25);
+            }}
+        """
+
+        self._copy_btn = QPushButton("📋 COPY")
+        self._copy_btn.setFont(tech_font(7, QFont.Weight.Bold))
+        self._copy_btn.setFixedHeight(22)
+        self._copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._copy_btn.setStyleSheet(_BTN_SM)
+        self._copy_btn.setToolTip("Copy all notes and links to clipboard")
+        self._copy_btn.clicked.connect(self.copy_all)
+        top_bar.addWidget(self._copy_btn)
+
+        self._clear_btn = QPushButton("🗑 CLEAR")
+        self._clear_btn.setFont(tech_font(7, QFont.Weight.Bold))
+        self._clear_btn.setFixedHeight(22)
+        self._clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_btn.setStyleSheet(_BTN_SM)
+        self._clear_btn.setToolTip("Clear Intel terminal")
+        self._clear_btn.clicked.connect(self.clear_notes)
+        top_bar.addWidget(self._clear_btn)
+
+        lay.addLayout(top_bar)
+
+        # Main browser
+        self._browser = QTextBrowser()
+        self._browser.setReadOnly(True)
+        self._browser.setOpenExternalLinks(True)
+        self._browser.document().setMaximumBlockCount(800)
+        self._browser.setFont(mono_font(9))
+        self._browser.setStyleSheet(f"""
+            QTextBrowser {{
+                background: rgba(3, 14, 26, 0.88);
+                color: {C.TEXT};
+                border: 1px solid rgba(0, 240, 255, 0.16);
+                border-radius: 10px;
+                padding: 8px;
+                selection-background-color: {C.PRI_GHO};
+            }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 6px;
+                border: none;
+                margin: 4px 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(0, 240, 255, 0.28);
+                border-radius: 3px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(0, 240, 255, 0.65);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0; border: none;
+            }}
+        """)
+        lay.addWidget(self._browser, stretch=1)
+
+        self._load_stored_notes()
+
+    def count(self) -> int:
+        return len(self._notes)
+
+    def _load_stored_notes(self):
+        if not self._notes_file.exists():
+            self._render_empty()
+            return
+        try:
+            items = json.loads(self._notes_file.read_text(encoding="utf-8"))
+            if isinstance(items, list):
+                self._notes = items
+                self._render_all()
+            else:
+                self._render_empty()
+        except Exception:
+            self._render_empty()
+
+    def _render_empty(self):
+        self._count_lbl.setText("0 ENTRIES")
+        self._browser.setHtml(f"""
+            <div style="font-family: sans-serif; color: rgba(0, 240, 255, 0.45); text-align: center; margin-top: 40px;">
+                <div style="font-size: 22px; margin-bottom: 8px;">📝</div>
+                <div style="font-size: 11px; font-weight: bold; letter-spacing: 1px;">INTEL & NOTES VAULT READY</div>
+                <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 6px; line-height: 1.4;">
+                    Special notes, research links, URLs, and code snippets provided by Alfred will appear here directly.
+                </div>
+            </div>
+        """)
+
+    def _render_all(self):
+        if not self._notes:
+            self._render_empty()
+            return
+        self._count_lbl.setText(f"{len(self._notes)} ENTRIES")
+        html = self._build_notes_html(self._notes)
+        self._browser.setHtml(html)
+        cur = self._browser.textCursor()
+        cur.movePosition(cur.MoveOperation.End)
+        self._browser.setTextCursor(cur)
+
+    def _build_notes_html(self, notes: list[dict]) -> str:
+        blocks = []
+        for n in notes:
+            blocks.append(self._format_card(n))
+        return f"""
+        <html>
+        <head>
+        <style>
+            body {{ font-family: 'Consolas', 'Segoe UI', monospace; background: transparent; margin: 0; padding: 2px; }}
+            a {{ color: #00f0ff; text-decoration: underline; }}
+            a:hover {{ color: #ffffff; text-decoration: none; }}
+            pre {{ background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(0, 240, 255, 0.15); border-radius: 6px; padding: 8px; color: #a5f3fc; font-family: Consolas, monospace; font-size: 11px; white-space: pre-wrap; }}
+        </style>
+        </head>
+        <body>
+            {''.join(blocks)}
+        </body>
+        </html>
+        """
+
+    def _format_card(self, item: dict) -> str:
+        import html as _html
+        import re as _re
+        ntype = str(item.get("type", "note")).lower()
+        title = item.get("title", "Untitled")
+        content = item.get("content", "")
+        t_str = item.get("time", "")
+
+        type_cfg = {
+            "link": ("🔗 LINK", "#00f0ff", "rgba(0, 240, 255, 0.15)"),
+            "data": ("📊 DATA", "#00ff9d", "rgba(0, 255, 157, 0.15)"),
+            "code": ("💻 CODE", "#c084fc", "rgba(192, 132, 252, 0.15)"),
+            "note": ("📌 NOTE", "#ffb800", "rgba(255, 184, 0, 0.15)"),
+        }
+        badge, b_col, border_col = type_cfg.get(ntype, ("📌 NOTE", "#ffb800", "rgba(255, 184, 0, 0.15)"))
+
+        esc_content = _html.escape(content)
+        url_re = _re.compile(r"(https?://[^\s<>\"']+)")
+        def _repl_url(match):
+            u = match.group(1)
+            return f'<a href="{u}" style="color: #00f0ff; font-weight: bold; text-decoration: underline;">{u}</a>'
+        formatted_content = url_re.sub(_repl_url, esc_content)
+
+        if ntype == "code" or "```" in content:
+            body_html = f"<pre>{formatted_content}</pre>"
+        else:
+            body_html = formatted_content.replace("\n", "<br>")
+
+        return f"""
+        <div style="background: rgba(4, 18, 32, 0.85); border-left: 3px solid {b_col}; border-top: 1px solid rgba(255,255,255,0.06); border-right: 1px solid rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+            <div style="display: flex; margin-bottom: 6px;">
+                <span style="background: {border_col}; color: {b_col}; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px; margin-right: 8px;">{badge}</span>
+                <span style="color: rgba(255, 255, 255, 0.40); font-size: 9px;">{t_str}</span>
+            </div>
+            <div style="color: #ffffff; font-weight: bold; font-size: 11px; margin-bottom: 6px;">{_html.escape(title)}</div>
+            <div style="color: rgba(255, 255, 255, 0.85); font-size: 10px; line-height: 1.45;">{body_html}</div>
+        </div>
+        """
+
+    def add_note(self, title: str, content: str, note_type: str = "note"):
+        timestamp = time.strftime("%H:%M:%S")
+        date_str = time.strftime("%Y-%m-%d")
+        entry = {
+            "title": title or "Intel Entry",
+            "content": content,
+            "type": note_type or "note",
+            "time": timestamp,
+            "date": date_str,
+        }
+        self._notes.append(entry)
+        if len(self._notes) > 200:
+            self._notes = self._notes[-200:]
+        
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            self._notes_file.write_text(json.dumps(self._notes, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception as e:
+            print(f"[NotesWidget] Persist failed: {e}")
+
+        self._render_all()
+        self.note_added.emit(len(self._notes))
+
+    def clear_notes(self):
+        self._notes = []
+        try:
+            if self._notes_file.exists():
+                self._notes_file.unlink()
+        except Exception:
+            pass
+        self._render_empty()
+        self.note_added.emit(0)
+
+    def copy_all(self):
+        if not self._notes:
+            return
+        lines = []
+        for n in self._notes:
+            lines.append(f"[{n.get('type', 'note').upper()}] {n.get('title', 'Untitled')} ({n.get('time', '')})")
+            lines.append(f"{n.get('content', '')}\n{'-'*40}")
+        text = "\n".join(lines)
+        QApplication.clipboard().setText(text)
+        old_txt = self._copy_btn.text()
+        self._copy_btn.setText("✓ COPIED")
+        QTimer.singleShot(1500, lambda: self._copy_btn.setText(old_txt))
+
+
 _FILE_ICONS = {
     "image":   ("🖼", "#00d4ff"), "video":   ("🎬", "#ff6b00"),
     "audio":   ("🎵", "#cc44ff"), "pdf":     ("📄", "#ff4444"),
@@ -2014,6 +2265,248 @@ class CustomizeOverlay(QWidget):
         user = self._user_input.text().strip()
         self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice)
         self.hide()
+
+
+class CapabilitiesOverlay(QWidget):
+    """
+    Floating glassmorphic overlay displaying a categorized directory of everything
+    Alfred can do, complete with live search filtering.
+    """
+    _OW, _OH = 620, 680
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            CapabilitiesOverlay {{
+                background: rgba(4, 15, 26, 0.97);
+                border: 1px solid rgba(0, 240, 255, 0.30);
+                border-radius: 16px;
+            }}
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(22, 18, 22, 18)
+        lay.setSpacing(10)
+
+        # Header
+        top_h = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title_box.setSpacing(2)
+        
+        hdr = QLabel("📋  ALFRED TACTICAL DIRECTIVES")
+        hdr.setFont(tech_font(12, QFont.Weight.Bold, letter_spacing=2.0))
+        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        title_box.addWidget(hdr)
+
+        sub = QLabel("OPERATIONAL CAPABILITIES & VOICE SKILLS DIRECTORY")
+        sub.setFont(tech_font(8, letter_spacing=1.0))
+        sub.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        title_box.addWidget(sub)
+        top_h.addLayout(title_box)
+        top_h.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(28, 28)
+        close_btn.setFont(tech_font(10, QFont.Weight.Bold))
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(255, 255, 255, 0.05);
+                color: {C.TEXT_MED};
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background: rgba(255, 42, 85, 0.25);
+                color: #ffffff;
+                border-color: #ff2a55;
+            }}
+        """)
+        close_btn.clicked.connect(self.hide)
+        top_h.addWidget(close_btn)
+        lay.addLayout(top_h)
+
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: rgba(0, 240, 255, 0.15); margin: 2px 0;")
+        lay.addWidget(sep)
+
+        # Search Bar
+        search_box = QHBoxLayout()
+        search_box.setSpacing(8)
+        search_icon = QLabel("🔍")
+        search_icon.setFont(tech_font(9))
+        search_icon.setStyleSheet("background: transparent;")
+        search_box.addWidget(search_icon)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Filter skills: e.g. open file, gmail, notes, weather, alarm...")
+        self._search.setFixedHeight(32)
+        self._search.setFont(tech_font(9, letter_spacing=0.4))
+        self._search.setStyleSheet(f"""
+            QLineEdit {{
+                background: rgba(255, 255, 255, 0.05);
+                color: #ffffff;
+                border: 1px solid rgba(0, 240, 255, 0.20);
+                border-radius: 8px;
+                padding: 4px 10px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {C.PRI};
+                background: rgba(0, 240, 255, 0.08);
+            }}
+        """)
+        self._search.textChanged.connect(self._filter_cards)
+        search_box.addWidget(self._search)
+        lay.addLayout(search_box)
+
+        # Scroll area for capability cards
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 6px;
+                border: none;
+                margin: 4px 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(0, 240, 255, 0.28);
+                border-radius: 3px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(0, 240, 255, 0.65);
+            }}
+        """)
+
+        cards_w = QWidget()
+        cards_w.setStyleSheet("background: transparent;")
+        self._cards_lay = QVBoxLayout(cards_w)
+        self._cards_lay.setContentsMargins(2, 6, 6, 6)
+        self._cards_lay.setSpacing(10)
+
+        self._cards: list[tuple[QWidget, str]] = []
+        self._populate_capabilities()
+
+        scroll.setWidget(cards_w)
+        lay.addWidget(scroll, stretch=1)
+
+        # Footer row
+        bot = QHBoxLayout()
+        tip = QLabel("💡 Tip: Ask naturally via voice or type in Directive Input.")
+        tip.setFont(tech_font(8, letter_spacing=0.3))
+        tip.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        bot.addWidget(tip)
+        bot.addStretch()
+
+        dismiss = QPushButton("CLOSE")
+        dismiss.setFixedSize(80, 28)
+        dismiss.setFont(tech_font(8, QFont.Weight.Bold))
+        dismiss.setCursor(Qt.CursorShape.PointingHandCursor)
+        dismiss.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(0, 240, 255, 0.15);
+                color: #ffffff;
+                border: 1px solid {C.PRI};
+                border-radius: 7px;
+            }}
+            QPushButton:hover {{
+                background: rgba(0, 240, 255, 0.35);
+            }}
+        """)
+        dismiss.clicked.connect(self.hide)
+        bot.addWidget(dismiss)
+        lay.addLayout(bot)
+
+    def _populate_capabilities(self):
+        cats = [
+            ("📂  FILES & FOLDER EXPLORER", "#00f0ff", [
+                ("Open Native Files", "Opens documents, PDFs, pictures, audio, spreadsheets in default OS apps ('open report.pdf')."),
+                ("Explore Folders", "Opens and highlights directories or files in Windows File Explorer ('explore my downloads')."),
+                ("Drive System Search", "Locates files across all system drives (C:, D:, Desktop, Documents) by name or extension."),
+                ("File Management", "Create, read, write, copy, move, and rename files with built-in undo protection."),
+                ("Desktop Organizer", "Automatically cleans and sorts scattered desktop files into organized category folders."),
+            ]),
+            ("✉️  GMAIL & COMMUNICATIONS", "#4488ff", [
+                ("Read Unread Emails", "Fetches and summarizes recent unread emails with sender and subject priority."),
+                ("Compose & Send Drafts", "Drafts and sends emails directly through your authenticated Google account."),
+                ("Daily Email Briefing", "Delivers a morning summary of emails and calendar events during startup brief."),
+                ("Messaging Automation", "Automates message sending to WhatsApp, Telegram, or Discord via PyAutoGUI."),
+            ]),
+            ("📝  INTEL & NOTES TERMINAL", "#ffb800", [
+                ("Special Notes Terminal", "Saves research notes, key takeaways, and references into your dedicated side terminal."),
+                ("Interactive Link Vault", "Stores clickable URLs and hyperlinks that launch in your default web browser."),
+                ("Data & Code Logging", "Formats code blocks, tables, and structured data cleanly without crowding chat."),
+                ("Clipboard Copy & Export", "One-click copy of all saved notes and persistent storage across reboots."),
+            ]),
+            ("🌐  WEB INTEL & MEDIA", "#00ff9d", [
+                ("Live Google Grounding", "Real-time Google search for breaking news, up-to-date facts, and current events."),
+                ("Article & Doc Extraction", "Extracts readable text from URLs and documentation pages."),
+                ("YouTube Playback", "Searches and launches YouTube videos or audio tracks in your browser."),
+                ("Weather & Atmosphere", "Current conditions, temperature forecasts, and air quality telemetry."),
+            ]),
+            ("⚙️  SYSTEM CONTROLS & TELEMETRY", "#ff6b00", [
+                ("Telemetry Matrix", "Real-time telemetry tracking CPU, RAM, Network, GPU, and Core temperatures."),
+                ("Acoustic Sensor Control", "Mute/unmute microphone listening, audio level HUD, and push-to-talk mode."),
+                ("Desktop Deployment", "Deploy desktop shortcuts and configure auto-start on Windows boot."),
+                ("Remote Neural Link", "Pair with companion mobile or browser interface for remote teleoperation."),
+            ]),
+            ("👁️  VISUAL RECON & MULTIMODAL", "#c084fc", [
+                ("Screen Capture Recon", "Captures active monitor screen and provides instant visual analysis and debugging."),
+                ("Live Webcam Stream", "Inspects webcam feed in the HUD or overlay for pair-programming and visual tasks."),
+                ("Interactive Doc Review", "Provides structured document audits with severity markers (serious, caution, note)."),
+            ]),
+            ("⏰  ALARMS, TIMERS & SYNAPSE", "#ff5577", [
+                ("Natural Speech Timers", "Set countdown timers and alarms ('set a timer for 15 minutes')."),
+                ("Scheduled Reminders", "Set reminders that notify you at specific times or intervals."),
+                ("Synapse Long-Term Memory", "Remembers your preferences, habits, instructions, and name across all sessions."),
+            ]),
+        ]
+
+        for cat_title, color, items in cats:
+            card = QWidget()
+            card.setStyleSheet(f"""
+                QWidget {{
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    border-left: 3px solid {color};
+                    border-radius: 10px;
+                }}
+            """)
+            c_lay = QVBoxLayout(card)
+            c_lay.setContentsMargins(12, 10, 12, 10)
+            c_lay.setSpacing(6)
+
+            h = QLabel(cat_title)
+            h.setFont(tech_font(9, QFont.Weight.Bold, letter_spacing=1.0))
+            h.setStyleSheet(f"color: {color}; background: transparent; border: none;")
+            c_lay.addWidget(h)
+
+            full_text = cat_title + " "
+            for title, desc in items:
+                row = QHBoxLayout()
+                row.setSpacing(6)
+                b_lbl = QLabel(f"• <b>{title}</b>: <span style='color: rgba(255,255,255,0.75);'>{desc}</span>")
+                b_lbl.setTextFormat(Qt.TextFormat.RichText)
+                b_lbl.setFont(tech_font(8, letter_spacing=0.2))
+                b_lbl.setStyleSheet("background: transparent; border: none;")
+                b_lbl.setWordWrap(True)
+                row.addWidget(b_lbl)
+                c_lay.addLayout(row)
+                full_text += f"{title} {desc} "
+
+            self._cards_lay.addWidget(card)
+            self._cards.append((card, full_text.lower()))
+
+    def _filter_cards(self, text: str):
+        q = text.strip().lower()
+        for card, searchable in self._cards:
+            if not q or q in searchable:
+                card.show()
+            else:
+                card.hide()
 
 
 class PluginManagerOverlay(QWidget):
@@ -3129,6 +3622,7 @@ class MainWindow(QMainWindow):
     _quiz_sig       = pyqtSignal(str, object, object)  # (topic, questions, grader)
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
+    _intel_note_sig = pyqtSignal(str, str, str)  # (title, content, note_type)
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -3171,6 +3665,7 @@ class MainWindow(QMainWindow):
         self._current_file: str | None = None
         self._remote_overlay: RemoteKeyOverlay | None = None
         self._customize_overlay: CustomizeOverlay | None = None
+        self._capabilities_overlay: CapabilitiesOverlay | None = None
 
         central = QWidget()
         central.setStyleSheet(f"background: {C.BG};")
@@ -3288,6 +3783,7 @@ class MainWindow(QMainWindow):
         self._quiz_sig.connect(self._show_quiz)
         self._quiz_hide_sig.connect(self._hide_quiz)
         self._review_sig.connect(self._show_review)
+        self._intel_note_sig.connect(self._on_intel_note_received)
         self._cam_stop = threading.Event()
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
@@ -3760,6 +4256,15 @@ class MainWindow(QMainWindow):
                 (cw.height() - oh) // 2,
                 ow, oh,
             )
+        if self._capabilities_overlay and self._capabilities_overlay.isVisible():
+            ow, oh = CapabilitiesOverlay._OW, CapabilitiesOverlay._OH
+            oh = min(oh, cw.height() - 20)
+            ow = min(ow, cw.width() - 20)
+            self._capabilities_overlay.setGeometry(
+                (cw.width()  - ow) // 2,
+                (cw.height() - oh) // 2,
+                ow, oh,
+            )
         # Camera preview — bottom-right corner of the center/HUD area
         pw = _CameraPreview._W
         ph = self._cam_preview.height() or _CameraPreview._H
@@ -3865,6 +4370,32 @@ class MainWindow(QMainWindow):
         self._drawer_btn.setCheckable(True)
         self._drawer_btn.clicked.connect(self._toggle_drawer)
         lay.addWidget(self._drawer_btn)
+
+        self._directives_btn = QPushButton("📋  DIRECTIVES")
+        self._directives_btn.setFixedHeight(34)
+        self._directives_btn.setFont(tech_font(9, QFont.Weight.Medium, letter_spacing=0.5))
+        self._directives_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._directives_btn.setToolTip("View full catalog of Alfred's skills & capabilities")
+        self._directives_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(255, 255, 255, 0.04);
+                color: {C.TEXT_MED};
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                border-radius: 9px;
+                padding: 0 14px;
+            }}
+            QPushButton:hover {{
+                background: rgba(0, 240, 255, 0.14);
+                color: #ffffff;
+                border: 1px solid rgba(0, 240, 255, 0.45);
+            }}
+            QPushButton:pressed {{
+                background: rgba(0, 240, 255, 0.22);
+            }}
+        """)
+        self._directives_btn.clicked.connect(self._open_directives)
+        lay.addWidget(self._directives_btn)
+
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(2)
@@ -4000,9 +4531,40 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: rgba(0, 240, 255, 0.85); background: transparent;")
             return l
 
-        lay.addWidget(_sec("ACTIVITY STREAM"))
+        # Segmented tab header: Activity Stream vs Intel & Notes
+        tab_row = QHBoxLayout()
+        tab_row.setSpacing(6)
+
+        self._tab_activity_btn = QPushButton("◈ ACTIVITY")
+        self._tab_activity_btn.setFixedHeight(28)
+        self._tab_activity_btn.setFont(tech_font(8, QFont.Weight.Bold, letter_spacing=0.8))
+        self._tab_activity_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tab_activity_btn.setCheckable(True)
+        self._tab_activity_btn.setChecked(True)
+
+        self._tab_notes_btn = QPushButton("📝 INTEL & NOTES")
+        self._tab_notes_btn.setFixedHeight(28)
+        self._tab_notes_btn.setFont(tech_font(8, QFont.Weight.Bold, letter_spacing=0.8))
+        self._tab_notes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tab_notes_btn.setCheckable(True)
+        self._tab_notes_btn.setChecked(False)
+
+        tab_row.addWidget(self._tab_activity_btn)
+        tab_row.addWidget(self._tab_notes_btn)
+        lay.addLayout(tab_row)
+
+        self._tab_activity_btn.clicked.connect(lambda: self._switch_terminal_tab(0))
+        self._tab_notes_btn.clicked.connect(lambda: self._switch_terminal_tab(1))
+
+        self._terminal_stack = QStackedWidget()
+        self._terminal_stack.setStyleSheet("background: transparent; border: none;")
         self._log = LogWidget()
-        lay.addWidget(self._log, stretch=1)
+        self._notes_terminal = NotesTerminalWidget()
+        self._notes_terminal.note_added.connect(self._on_notes_count_updated)
+        self._terminal_stack.addWidget(self._log)
+        self._terminal_stack.addWidget(self._notes_terminal)
+        lay.addWidget(self._terminal_stack, stretch=1)
+        self._update_tab_button_styles(0)
 
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: rgba(0, 240, 255, 0.12); margin: 2px 0;")
@@ -4126,6 +4688,14 @@ class MainWindow(QMainWindow):
         remote_btn.setStyleSheet(_BTN_STYLE_PRI)
         remote_btn.clicked.connect(self._open_remote)
         lay.addWidget(remote_btn)
+
+        dir_btn = QPushButton("📋  ALFRED DIRECTIVES & SKILLS")
+        dir_btn.setFixedHeight(30)
+        dir_btn.setFont(tech_font(8, QFont.Weight.Bold))
+        dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        dir_btn.setStyleSheet(_BTN_STYLE_PRI)
+        dir_btn.clicked.connect(self._open_directives)
+        lay.addWidget(dir_btn)
 
         fs_btn = QPushButton("⛶  EXPAND HUD  [F11]")
         fs_btn.setFixedHeight(29)
@@ -5189,6 +5759,87 @@ class MainWindow(QMainWindow):
                 QPushButton:hover {{ color: {C.TEXT}; border: 1px solid {C.BORDER_B}; }}
             """)
 
+    # ── Directives & Intel Terminal Controls ────────────────────────────────────
+
+    def _open_directives(self):
+        if self._capabilities_overlay:
+            self._capabilities_overlay.hide()
+        cw = self.centralWidget()
+        ov = CapabilitiesOverlay(parent=cw)
+        ow, oh = CapabilitiesOverlay._OW, CapabilitiesOverlay._OH
+        oh = min(oh, cw.height() - 24)
+        ow = min(ow, cw.width() - 24)
+        ov.setGeometry(
+            (cw.width() - ow) // 2,
+            (cw.height() - oh) // 2,
+            ow, oh,
+        )
+        ov.show()
+        self._capabilities_overlay = ov
+
+    def _switch_terminal_tab(self, index: int):
+        self._terminal_stack.setCurrentIndex(index)
+        self._update_tab_button_styles(index)
+        cnt = self._notes_terminal.count()
+        self._tab_notes_btn.setText(f"📝 INTEL & NOTES ({cnt})")
+
+    def _update_tab_button_styles(self, active_index: int):
+        _ACTIVE_STYLE = f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(0, 240, 255, 0.25), stop:1 rgba(0, 180, 255, 0.12));
+                color: #ffffff;
+                border: 1px solid {C.PRI};
+                border-radius: 7px;
+                font-weight: bold;
+            }}
+        """
+        _INACTIVE_STYLE = f"""
+            QPushButton {{
+                background: rgba(255, 255, 255, 0.04);
+                color: {C.TEXT_MED};
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 7px;
+            }}
+            QPushButton:hover {{
+                background: rgba(0, 240, 255, 0.08);
+                color: #ffffff;
+                border: 1px solid rgba(0, 240, 255, 0.30);
+            }}
+        """
+        if active_index == 0:
+            self._tab_activity_btn.setChecked(True)
+            self._tab_activity_btn.setStyleSheet(_ACTIVE_STYLE)
+            self._tab_notes_btn.setChecked(False)
+            self._tab_notes_btn.setStyleSheet(_INACTIVE_STYLE)
+        else:
+            self._tab_activity_btn.setChecked(False)
+            self._tab_activity_btn.setStyleSheet(_INACTIVE_STYLE)
+            self._tab_notes_btn.setChecked(True)
+            self._tab_notes_btn.setStyleSheet(_ACTIVE_STYLE)
+
+    def _on_notes_count_updated(self, count: int):
+        cur_idx = self._terminal_stack.currentIndex()
+        if cur_idx == 0 and count > 0:
+            self._tab_notes_btn.setText(f"📝 INTEL & NOTES • ({count})")
+            self._tab_notes_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255, 184, 0, 0.28), stop:1 rgba(0, 240, 255, 0.20));
+                    color: #fffae0;
+                    border: 1px solid rgba(255, 184, 0, 0.85);
+                    border-radius: 7px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background: rgba(0, 240, 255, 0.30);
+                    color: #ffffff;
+                }}
+            """)
+        else:
+            self._tab_notes_btn.setText(f"📝 INTEL & NOTES ({count})")
+
+    def _on_intel_note_received(self, title: str, content: str, note_type: str):
+        self._notes_terminal.add_note(title, content, note_type)
+
     # ── Customization ────────────────────────────────────────────────────────────
 
     def _open_customize(self):
@@ -5659,6 +6310,17 @@ class JarvisUI:
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
+
+    def add_intel_note(self, title: str, content: str, note_type: str = "note"):
+        """Thread-safe: post special note, research link, or structured data to the dedicated Notes Terminal."""
+        self._win._intel_note_sig.emit(str(title), str(content), str(note_type))
+
+    def clear_intel_notes(self):
+        """Thread-safe: clear the dedicated Notes Terminal."""
+        try:
+            self._win._notes_terminal.clear_notes()
+        except Exception:
+            pass
 
     def wait_for_api_key(self):
         while not self._win._ready:

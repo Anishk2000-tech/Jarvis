@@ -92,7 +92,15 @@ def _restore_from_trash(original: Path) -> str:
 
 _SAFE_ROOTS: list[Path] = [
     Path.home(),
+    Path(__file__).resolve().parent.parent,
 ]
+
+if _OS == "Windows":
+    import string
+    for _letter in string.ascii_uppercase:
+        _drv = Path(f"{_letter}:\\")
+        if _drv.exists():
+            _SAFE_ROOTS.append(_drv)
 
 def _is_safe_path(target: Path) -> bool:
     """Is the given path inside _SAFE_ROOTS? If not, reject the operation."""
@@ -645,6 +653,71 @@ def get_file_info(path: str, name: str = "") -> str:
     except Exception as e:
         return f"Could not get file info: {e}"
 
+def open_file(path_str: str, name: str = "") -> str:
+    """Open a file or document in its default OS associated application."""
+    import subprocess
+    try:
+        raw = (path_str or "").strip()
+        if name and not raw:
+            target = _resolve_path("downloads") / name
+            if not target.exists():
+                target = _resolve_path("desktop") / name
+            if not target.exists():
+                target = _resolve_path("documents") / name
+        else:
+            target = _resolve_path(raw)
+            if not target.exists() and name:
+                target = target / name
+
+        if not target.exists():
+            return f"Sir, I could not find '{name or path_str}' to open."
+
+        if not _is_safe_path(target):
+            return f"Access to '{target}' is restricted."
+
+        if _OS == "Windows":
+            os.startfile(str(target))
+        elif _OS == "Darwin":
+            subprocess.Popen(["open", str(target)])
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+
+        return f"Sir, I have opened '{target.name}' in its default application."
+    except Exception as e:
+        return f"Failed to open '{path_str}': {e}"
+
+
+def explore_folder(path_str: str) -> str:
+    """Reveal a folder or select a file in Windows File Explorer / system file manager."""
+    import subprocess
+    try:
+        raw = (path_str or "").strip()
+        target = _resolve_path(raw) if raw else _get_downloads()
+
+        if not target.exists():
+            return f"Sir, folder or path '{path_str}' does not exist."
+
+        if not _is_safe_path(target):
+            return f"Access to '{target}' is restricted."
+
+        if _OS == "Windows":
+            if target.is_file():
+                subprocess.Popen(f'explorer.exe /select,"{target}"')
+            else:
+                os.startfile(str(target))
+        elif _OS == "Darwin":
+            if target.is_file():
+                subprocess.Popen(["open", "-R", str(target)])
+            else:
+                subprocess.Popen(["open", str(target)])
+        else:
+            subprocess.Popen(["xdg-open", str(target if target.is_dir() else target.parent)])
+
+        return f"Sir, opened File Explorer at '{target.name or str(target)}'."
+    except Exception as e:
+        return f"Failed to explore folder '{path_str}': {e}"
+
+
 def file_controller(
     parameters: dict = None,
     response=None,
@@ -660,7 +733,13 @@ def file_controller(
         player.write_log(f"[file] {action} {name or path}")
 
     try:
-        if action == "list":
+        if action in ("open", "launch"):
+            return open_file(path, name=name)
+
+        elif action in ("explore", "reveal", "show", "browse"):
+            return explore_folder(path if path != "desktop" or not name else name)
+
+        elif action == "list":
             return list_files(path)
 
         elif action == "create_file":
@@ -724,17 +803,20 @@ def file_controller(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "file_controller",
-    "description": "Manages files and folders: list, create, delete, move, copy, rename, read, write, find, disk usage.",
+    "description": (
+        "Manages files and folders: open files in their default apps, explore/reveal folders in File Explorer, "
+        "list directory contents, create, delete, move, copy, rename, read, write, search/find files, and check disk usage."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
+                "description": "open | explore | list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
             },
             "path": {
                 "type": "STRING",
-                "description": "File/folder path or shortcut: desktop, downloads, documents, home"
+                "description": "File or folder path to open/explore/manage, or shortcut: desktop, downloads, documents, home"
             },
             "destination": {
                 "type": "STRING",

@@ -308,7 +308,7 @@
         <span class="badge">STARK INDUSTRIES</span>
         <span class="badge">MARK LIV</span>
       </div>
-      <div class="logo"><em>J</em>ARVIS</div>
+      <div class="logo"><em>A</em>LFRED</div>
       <div class="sub">Quantum Access Protocol</div>
       <p id="reconnecting">AUTHENTICATING DEVICE TOKEN…</p>
       <p class="hint">Access requires session authorization. Press <strong style="color:var(--text)">Remote Control</strong> in the desktop HUD to obtain your PIN or QR code.</p>
@@ -328,80 +328,107 @@
   </div>
 
   <script>
-    // ── STARK ARC REACTOR ANIMATION ENGINE ────────────────────────────────────
+    // ── STARK QUANTUM GYRO-REACTOR ANIMATION ENGINE ──────────────────────────
     const canvas = document.getElementById('reactor-canvas');
     const ctx = canvas.getContext('2d');
     let phase = 0;
     let boost = 1.0;
 
+    // Cosmic Stardust Particles
+    const particles = [];
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        angle: Math.random() * Math.PI * 2,
+        dist: 0.2 + Math.random() * 0.75,
+        speed: (0.003 + Math.random() * 0.007) * (Math.random() > 0.5 ? 1 : -1),
+        size: 1.0 + Math.random() * 2.4,
+        alpha: 0.35 + Math.random() * 0.65,
+        hue: Math.random() > 0.35 ? '#00f0ff' : '#ffb800',
+      });
+    }
+
     document.getElementById('reactor-wrap').addEventListener('mouseenter', () => { boost = 2.4; });
     document.getElementById('reactor-wrap').addEventListener('mouseleave', () => { boost = 1.0; });
     document.getElementById('reactor-wrap').addEventListener('click', () => {
-      boost = 3.5;
+      boost = 3.6;
       setTimeout(() => { boost = 1.0; }, 800);
     });
 
+    function setupHiDPI(c, context, cssW, cssH) {
+      const dpr = window.devicePixelRatio || 1;
+      if (c.width !== cssW * dpr || c.height !== cssH * dpr) {
+        c.width = cssW * dpr;
+        c.height = cssH * dpr;
+      }
+      context.resetTransform ? context.resetTransform() : context.setTransform(1, 0, 0, 1, 0, 0);
+      context.scale(dpr, dpr);
+    }
+
     function drawReactor() {
-      const W = canvas.width;
-      const H = canvas.height;
-      const cx = W / 2;
-      const cy = H / 2;
-      const r = W * 0.44;
+      const cssW = 220;
+      const cssH = 220;
+      setupHiDPI(canvas, ctx, cssW, cssH);
 
-      ctx.clearRect(0, 0, W, H);
+      const cx = cssW / 2;
+      const cy = cssH / 2;
+      const r = (cssW / 2) * 0.88;
 
-      // Core Atmospheric Radial Glow
-      const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
-      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      // 1. Core Atmospheric Radial Glow
+      const breath = Math.sin(phase * 0.035) * 0.07;
+      const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.05, cx, cy, r * (0.95 + breath));
+      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.50)');
       glowGrad.addColorStop(0.35, 'rgba(0, 136, 255, 0.20)');
       glowGrad.addColorStop(0.75, 'rgba(0, 240, 255, 0.05)');
       glowGrad.addColorStop(1, 'transparent');
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r * 0.98, 0, Math.PI * 2);
       ctx.fill();
 
-      // Outer Static Calibration Ring
+      // 2. Cosmic Stardust Particles
+      particles.forEach(p => {
+        p.angle += p.speed * boost;
+        const pr = r * p.dist;
+        const px = cx + Math.cos(p.angle) * pr;
+        const py = cy + Math.sin(p.angle) * pr;
+        const pAlpha = p.alpha * (0.6 + 0.4 * Math.sin(phase * 0.05 + p.angle * 2));
+
+        ctx.fillStyle = p.hue;
+        ctx.globalAlpha = pAlpha;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1.0;
+
+      // 3. Outer Static Calibration Ring & Laser Ticks
       ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Laser Radial Calibration Ticks (72 ticks)
       for (let i = 0; i < 72; i++) {
         const ang = (i * 5 * Math.PI) / 180;
         const isMajor = (i % 6 === 0);
-        const len = isMajor ? r * 0.11 : r * 0.05;
-        const r0 = r - len;
-        ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.75)' : 'rgba(0, 240, 255, 0.25)';
-        ctx.lineWidth = isMajor ? 2.0 : 1.0;
+        const len = isMajor ? r * 0.10 : r * 0.04;
+        const r0 = r * 0.95 - len;
+        ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.80)' : 'rgba(0, 240, 255, 0.22)';
+        ctx.lineWidth = isMajor ? 1.8 : 0.9;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
-        ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
+        ctx.lineTo(cx + Math.cos(ang) * (r * 0.95), cy + Math.sin(ang) * (r * 0.95));
         ctx.stroke();
       }
 
-      // Rotating Nano-Aperture Gear Ring (36 notches)
-      const nTeeth = 36;
-      const rAperture = r * 0.78;
-      const rotAperture = phase * 0.02;
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
-      ctx.lineWidth = 1.6;
-      for (let i = 0; i < nTeeth; i++) {
-        const ang = (i * (360 / nTeeth) * Math.PI) / 180 + rotAperture;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(ang) * (rAperture - 4), cy + Math.sin(ang) * (rAperture - 4));
-        ctx.lineTo(cx + Math.cos(ang) * (rAperture + 4), cy + Math.sin(ang) * (rAperture + 4));
-        ctx.stroke();
-      }
-
-      // Smooth Counter-Rotating Kinetic Arcs
+      // 4. Multi-Layered Counter-Rotating Kinetic Arcs with 3D Gimbal Effect
       const arcLayers = [
-        { rr: 0.94, span: 80,  count: 3, dir: +1, spd: 0.045, col: '#00f0ff', wid: 3.0 },
-        { rr: 0.86, span: 120, count: 2, dir: -1, spd: 0.035, col: 'rgba(0, 136, 255, 0.7)', wid: 2.2 },
-        { rr: 0.70, span: 50,  count: 4, dir: +1, spd: 0.060, col: '#ffb700', wid: 2.4 },
-        { rr: 0.62, span: 100, count: 2, dir: -1, spd: 0.040, col: '#00f0ff', wid: 1.8 }
+        { rr: 0.92, span: 80,  count: 3, dir: +1, spd: 0.042, col: '#00f0ff', wid: 2.8 },
+        { rr: 0.82, span: 120, count: 2, dir: -1, spd: 0.034, col: 'rgba(0, 136, 255, 0.85)', wid: 2.2 },
+        { rr: 0.68, span: 55,  count: 4, dir: +1, spd: 0.060, col: '#ffb700', wid: 2.4 },
+        { rr: 0.58, span: 100, count: 2, dir: -1, spd: 0.038, col: '#00f0ff', wid: 1.8 }
       ];
 
       arcLayers.forEach(l => {
@@ -419,70 +446,87 @@
           ctx.arc(cx, cy, rad, start, start + spanRad);
           ctx.stroke();
 
-          // Orbital Nano-Pips on leading edge
-          if (l.rr > 0.75) {
+          // Glowing Orbital Nano-Pips on leading edge
+          if (l.rr > 0.65) {
             const pipAng = start + (l.dir > 0 ? spanRad : 0);
             ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = l.col;
+            ctx.shadowBlur = 8;
             ctx.beginPath();
             ctx.arc(cx + Math.cos(pipAng) * rad, cy + Math.sin(pipAng) * rad, 3.2, 0, Math.PI * 2);
             ctx.fill();
+            ctx.shadowBlur = 0;
           }
         }
       });
 
-      // Quantum Audio/Frequency Needles (48 radial needles)
-      const nSpikes = 48;
+      // 5. Dynamic 3D Gyroscopic Perspective Ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(phase * 0.016);
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      const pitch = 0.42 + 0.08 * Math.sin(phase * 0.02);
+      ctx.ellipse(0, 0, r * 0.76, r * 0.76 * pitch, 0.3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const satAng = -phase * 0.04;
+      const satX = Math.cos(satAng) * (r * 0.76);
+      const satY = Math.sin(satAng) * (r * 0.76 * pitch);
+      ctx.fillStyle = '#00ff9d';
+      ctx.shadowColor = '#00ff9d';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(satX, satY, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+
+      // 6. Frequency Pulse Needles
+      const nSpikes = 44;
       const rSpike = r * 0.44;
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.55)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.60)';
+      ctx.lineWidth = 1.4;
       for (let i = 0; i < nSpikes; i++) {
-        const ang = (i * (360 / nSpikes) * Math.PI) / 180 + phase * 0.015;
-        const h = r * (0.04 + 0.03 * Math.sin(phase * 0.08 + i * 0.7));
+        const ang = (i * (360 / nSpikes) * Math.PI) / 180 + phase * 0.012;
+        const h = r * (0.03 + 0.04 * Math.sin(phase * 0.08 + i * 0.75));
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(ang) * rSpike, cy + Math.sin(ang) * rSpike);
         ctx.lineTo(cx + Math.cos(ang) * (rSpike + h), cy + Math.sin(ang) * (rSpike + h));
         ctx.stroke();
       }
 
-      // Reactor Core Triad Magnetic Nodes (Iconic Mark 85 Containment Triad)
-      const rTri = r * 0.38;
-      const rotTri = phase * 0.018;
-      for (let i = 0; i < 3; i++) {
-        const ang = (i * 120 * Math.PI) / 180 + rotTri;
-        ctx.strokeStyle = '#00f0ff';
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(ang) * (rTri - 6), cy + Math.sin(ang) * (rTri - 6));
-        ctx.lineTo(cx + Math.cos(ang) * (rTri + 12), cy + Math.sin(ang) * (rTri + 12));
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffb700';
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(ang) * (rTri + 14), cy + Math.sin(ang) * (rTri + 14), 3.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Central Obsidian Glass Quantum Lens
-      const rInner = r * 0.33;
+      // 7. Central Obsidian Glass Quantum Lens
+      const rInner = r * 0.34;
       const lensGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rInner);
-      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.55)');
-      lensGrad.addColorStop(0.5, 'rgba(0, 30, 60, 0.95)');
-      lensGrad.addColorStop(0.9, 'rgba(2, 8, 16, 0.98)');
-      lensGrad.addColorStop(1, 'rgba(0, 240, 255, 0.85)');
+      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.70)');
+      lensGrad.addColorStop(0.45, 'rgba(2, 24, 48, 0.95)');
+      lensGrad.addColorStop(1, 'rgba(0, 240, 255, 0.88)');
 
       ctx.fillStyle = lensGrad;
       ctx.strokeStyle = '#00f0ff';
-      ctx.lineWidth = 2.0;
+      ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
+      // Specular Glare across lens
+      const glare = ctx.createLinearGradient(cx - rInner, cy - rInner, cx + rInner, cy + rInner);
+      glare.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+      glare.addColorStop(0.4, 'rgba(255, 255, 255, 0.05)');
+      glare.addColorStop(0.6, 'transparent');
+      ctx.fillStyle = glare;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rInner - 1, 0, Math.PI * 2);
+      ctx.fill();
+
       // Hexagonal Quantum Lattice inside Lens
-      const rHex = rInner * 0.65;
-      const rotHex = -phase * 0.015;
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
-      ctx.lineWidth = 1.2;
+      const rHex = rInner * 0.68;
+      const rotHex = -phase * 0.016;
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
+      ctx.lineWidth = 1.0;
       ctx.beginPath();
       for (let h = 0; h < 6; h++) {
         const hAng = (h * 60 * Math.PI) / 180 + rotHex;
@@ -494,22 +538,15 @@
       ctx.closePath();
       ctx.stroke();
 
-      // Center Designation (Crisp Laser Typography)
+      // Laser Typography inside Core
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
+      ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0, 240, 255, 0.9)';
+      ctx.shadowColor = 'rgba(0, 240, 255, 0.95)';
       ctx.shadowBlur = 10;
       ctx.fillText('ALFRED', cx, cy);
-      ctx.shadowBlur = 0; // reset
-
-      // Specular 3D Reflection Arc
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-      ctx.lineWidth = 2.0;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rInner - 2, -Math.PI * 0.75, -Math.PI * 0.25);
-      ctx.stroke();
+      ctx.shadowBlur = 0;
 
       phase += 1.2 * boost;
       requestAnimationFrame(drawReactor);
