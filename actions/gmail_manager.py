@@ -37,7 +37,9 @@ def _load_gmail_creds() -> tuple[str, str]:
                 app_pw = app_pw or data.get("gmail_app_password", "").strip()
             except Exception:
                 pass
-    return email_addr, app_pw
+    # Google App Passwords often have 4-character grouping spaces ('abcd efgh ijkl mnop')
+    clean_pw = app_pw.replace(" ", "").strip()
+    return email_addr, clean_pw
 
 
 def _clean_header_str(val: Any) -> str:

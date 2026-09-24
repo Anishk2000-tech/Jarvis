@@ -51,15 +51,18 @@ def _get_live_weather(city: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    url = f"https://wttr.in/{urllib.parse.quote(target_city)}?format=%C+%t+%w" if target_city else "https://wttr.in?format=%C+%t+%w"
+    url = f"https://wttr.in/{urllib.parse.quote(target_city)}?format=%C+and+%t" if target_city else "https://wttr.in?format=%C+and+%t"
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "curl/7.88.1"})
         with urllib.request.urlopen(req, timeout=4) as resp:
-            text = resp.read().decode("utf-8").strip()
-            if text and not text.startswith("<") and "Unknown" not in text:
+            text = resp.read().decode("utf-8", errors="replace").strip()
+            # Clean symbols like arrows and degree signs for safe TTS & console display
+            clean_text = text.replace("°C", " degrees Celsius").replace("°F", " degrees Fahrenheit")
+            clean_text = "".join(ch for ch in clean_text if ord(ch) < 128)
+            if clean_text and not clean_text.startswith("<") and "Unknown" not in clean_text:
                 loc = f" in {target_city}" if target_city else ""
-                return f"Currently{loc}, conditions are {text}."
+                return f"Currently{loc}, conditions are {clean_text.strip()}."
     except Exception:
         pass
 
