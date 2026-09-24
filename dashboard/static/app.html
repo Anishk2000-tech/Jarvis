@@ -3,148 +3,507 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JARVIS Dashboard</title>
+  <title>JARVIS — Stark Mark-LIV Quantum Terminal</title>
   <script src="/static/crypto.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:      #07090f;
-      --surface: rgba(255,255,255,0.04);
-      --border:  rgba(255,255,255,0.07);
-      --accent:  #6366f1;
-      --adim:    rgba(99,102,241,0.14);
-      --text:    #dde3ed;
-      --muted:   #5e6a7e;
-      --green:   #22c55e;
-      --gdim:    rgba(34,197,94,0.14);
+      --bg:        #02060d;
+      --surface:   rgba(6, 16, 28, 0.72);
+      --border:    rgba(0, 240, 255, 0.18);
+      --border-hi: rgba(0, 240, 255, 0.45);
+      --accent:    #00f0ff;
+      --accent2:   #0088ff;
+      --adim:      rgba(0, 240, 255, 0.12);
+      --text:      #eaf6ff;
+      --muted:     #6b829c;
+      --green:     #00ff9d;
+      --gdim:      rgba(0, 255, 157, 0.14);
+      --err:       #ff3b5c;
     }
     html, body {
-      height: 100%; background: var(--bg); color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      display: flex; flex-direction: column; overflow: hidden;
+      height: 100%;
+      background: radial-gradient(circle at 50% 10%, #061526 0%, #02070f 65%, #010307 100%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Ambient cyber background grid */
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: 
+        radial-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+        radial-gradient(rgba(0, 136, 255, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px, 16px 16px;
+      pointer-events: none;
+      opacity: 0.6;
     }
 
     /* ── HEADER ── */
     header {
-      flex-shrink: 0; display: flex; align-items: center; gap: 10px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border);
-      background: rgba(7,9,15,0.95);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(4, 12, 22, 0.85);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      z-index: 10;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
     }
-    .logo { font-size: 15px; font-weight: 700; letter-spacing: 6px; }
-    .logo em { color: var(--accent); font-style: normal; }
-    .pill {
-      display: flex; align-items: center; gap: 6px; padding: 4px 11px;
-      border-radius: 99px; background: var(--surface); border: 1px solid var(--border);
-      font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
-      color: var(--muted); transition: all 0.3s;
-    }
-    .pill.on { background: var(--gdim); border-color: rgba(34,197,94,0.3); color: var(--green); }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
-    .pill.on .dot { background: var(--green); animation: blink 2s infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .spacer { flex: 1; }
-    .enc-badge {
-      font-size: 9px; font-weight: 700; letter-spacing: 1.5px; padding: 3px 8px;
-      border-radius: 4px; display: none;
-    }
-    .enc-badge.on  { display: block; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); color: var(--green); }
-    .enc-badge.off { display: block; background: rgba(255,100,100,0.08); border: 1px solid rgba(255,100,100,0.2); color: #f87171; }
-    .url { font-size: 10px; font-family: monospace; color: var(--muted); padding: 4px 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 
-    /* ── FEED ── */
-    main { flex: 1; overflow-y: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 10px; }
-    main::-webkit-scrollbar { width: 3px; }
-    main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; animation: pop 0.18s ease; }
-    @keyframes pop { from { opacity:0; transform:translateY(4px); } }
-    .msg-j   { align-self:flex-start; background:var(--adim);   border:1px solid rgba(99,102,241,0.18); border-bottom-left-radius:4px; }
-    .msg-u   { align-self:flex-end;   background:var(--surface); border:1px solid var(--border);        border-bottom-right-radius:4px; }
-    .msg-sys { align-self:center; font-size:11px; color:var(--muted); padding:2px 0; background:transparent; border:none; letter-spacing:0.3px; }
-    .lbl { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; opacity:0.45; margin-bottom:4px; }
-    .msg-j .lbl { color:var(--accent); }
-    .msg-u .lbl { color:var(--muted); text-align:right; }
+    /* Interactive Holographic Reactor Orb in Header */
+    .header-reactor {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      cursor: pointer;
+      position: relative;
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.5));
+      transition: transform 0.2s ease;
+    }
+    .header-reactor:hover {
+      transform: scale(1.08);
+    }
+    #mini-reactor-canvas {
+      width: 38px;
+      height: 38px;
+      display: block;
+    }
+
+    .brand-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+    .logo {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: #ffffff;
+      text-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+    }
+    .logo em {
+      color: var(--accent);
+      font-style: normal;
+      text-shadow: 0 0 16px var(--accent);
+    }
+    .sub-brand {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-top: -2px;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .pill.on {
+      background: var(--gdim);
+      border-color: rgba(0, 255, 157, 0.35);
+      color: var(--green);
+      box-shadow: 0 0 14px rgba(0, 255, 157, 0.2);
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .pill.on .dot {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 2s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    .spacer { flex: 1; }
+
+    .enc-badge {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      display: none;
+    }
+    .enc-badge.on  {
+      display: block;
+      background: rgba(0, 255, 157, 0.08);
+      border: 1px solid rgba(0, 255, 157, 0.28);
+      color: var(--green);
+      box-shadow: 0 0 10px rgba(0, 255, 157, 0.15);
+    }
+    .enc-badge.off {
+      display: block;
+      background: rgba(255, 59, 92, 0.08);
+      border: 1px solid rgba(255, 59, 92, 0.25);
+      color: var(--err);
+    }
+    .url {
+      font-size: 10px;
+      font-family: 'SF Mono', monospace;
+      color: var(--muted);
+      padding: 5px 10px;
+      background: rgba(0, 240, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    /* ── COLLAPSIBLE HOLOGRAPHIC REACTOR DOCK ── */
+    #reactor-panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 20px 8px;
+      background: linear-gradient(180deg, rgba(6, 16, 28, 0.75) 0%, rgba(2, 6, 13, 0) 100%);
+      border-bottom: 1px solid rgba(0, 240, 255, 0.12);
+      transition: max-height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+      overflow: hidden;
+      z-index: 5;
+    }
+    #reactor-panel.collapsed {
+      max-height: 0;
+      padding: 0;
+      opacity: 0;
+      border-bottom: none;
+      pointer-events: none;
+    }
+    #main-reactor-canvas {
+      width: 140px;
+      height: 140px;
+      filter: drop-shadow(0 0 18px rgba(0, 240, 255, 0.4));
+    }
+    .reactor-status-tag {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--accent);
+      margin-top: 4px;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    /* ── CHAT FEED ── */
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 2;
+    }
+    main::-webkit-scrollbar { width: 4px; }
+    main::-webkit-scrollbar-thumb {
+      background: rgba(0, 240, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    .msg {
+      max-width: 82%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+      animation: pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(6px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Assistant Glass Bubble */
+    .msg-j {
+      align-self: flex-start;
+      background: rgba(0, 240, 255, 0.08);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    /* User Glass Bubble */
+    .msg-u {
+      align-self: flex-end;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* System Telemetry Pill */
+    .msg-sys {
+      align-self: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      padding: 4px 12px;
+      background: rgba(0, 240, 255, 0.05);
+      border: 1px dashed rgba(0, 240, 255, 0.25);
+      border-radius: 99px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .lbl {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin-bottom: 5px;
+    }
+    .msg-j .lbl { color: var(--accent); text-shadow: 0 0 8px rgba(0, 240, 255, 0.5); }
+    .msg-u .lbl { color: #8fa5bd; text-align: right; }
 
     /* ── FILE CARD ── */
     .msg-file {
       align-self: flex-end;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 14px; border-bottom-right-radius: 4px;
-      padding: 11px 14px; display: flex; align-items: center; gap: 12px;
-      max-width: 82%; animation: pop 0.18s ease;
+      background: rgba(6, 16, 28, 0.75);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      border-bottom-right-radius: 4px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      max-width: 82%;
+      animation: pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
-    .fc-icon { font-size: 26px; flex-shrink: 0; }
+    .fc-icon { font-size: 28px; flex-shrink: 0; }
     .fc-meta { flex: 1; min-width: 0; }
-    .fc-lbl  { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; opacity:0.45; color:var(--muted); margin-bottom:4px; }
-    .fc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fc-lbl  { font-size: 9px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .fc-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ffffff; }
     .fc-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .fc-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-top: 7px; overflow: hidden; }
-    .fc-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width 0.12s linear; }
-    .fc-status { font-size: 10px; font-weight: 700; letter-spacing: 1px; flex-shrink: 0; color: var(--muted); }
-    .fc-status.done { color: var(--green); }
-    .fc-status.err  { color: #f87171; }
-    .fc-dl { display:block; margin-top:6px; font-size:11px; color:var(--accent); text-decoration:none; font-weight:600; }
-    .fc-dl:hover { opacity: 0.8; }
-
-    /* ── FOOTER ── */
-    footer { flex-shrink:0; padding:10px 14px; border-top:1px solid var(--border); background:rgba(7,9,15,0.95); display:flex; gap:8px; align-items:center; }
-    #inp { flex:1; padding:11px 14px; background:var(--surface); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-size:14px; outline:none; transition:border-color 0.15s; }
-    #inp:focus { border-color: var(--accent); }
-    #inp::placeholder { color: var(--muted); }
-    .btn { padding:11px 15px; border:none; border-radius:12px; font-size:11px; font-weight:700; letter-spacing:1.5px; cursor:pointer; transition:opacity 0.15s,transform 0.1s; }
-    .btn:active { transform: scale(0.96); }
-    .btn:hover  { opacity: 0.82; }
-    .btn-send { background: var(--accent); color: #fff; }
-    .btn-wake { background:var(--surface); border:1px solid var(--border); color:var(--muted); display:none; }
-    .btn-wake.show { display:block; color:var(--green); border-color:rgba(34,197,94,0.35); }
-    .btn-attach {
-      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
-      padding: 11px 13px; font-size: 16px; line-height: 1; border-radius: 12px;
-      cursor: pointer; transition: opacity 0.15s, transform 0.1s; display: flex;
-      align-items: center; justify-content: center; flex-shrink: 0;
+    .fc-bar-wrap { height: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .fc-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #0088ff, #00f0ff); border-radius: 2px; transition: width 0.12s linear; }
+    .fc-status { font-size: 10px; font-weight: 800; letter-spacing: 1px; flex-shrink: 0; color: var(--muted); }
+    .fc-status.done { color: var(--green); text-shadow: 0 0 8px var(--green); }
+    .fc-status.err  { color: var(--err); }
+    .fc-dl {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+      padding: 3px 8px;
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.22);
+      border-radius: 6px;
+      transition: all 0.2s;
     }
-    .btn-attach:hover  { opacity: 0.82; border-color: var(--accent); color: var(--accent); }
-    .btn-attach:active { transform: scale(0.96); }
+    .fc-dl:hover { background: rgba(0, 240, 255, 0.18); color: #ffffff; }
+
+    /* ── FOOTER DOCK ── */
+    footer {
+      flex-shrink: 0;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      background: rgba(4, 12, 22, 0.88);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      z-index: 10;
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+    }
+    #inp {
+      flex: 1;
+      padding: 12px 18px;
+      background: rgba(0, 16, 32, 0.65);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 500;
+      outline: none;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    #inp:focus {
+      border-color: var(--accent);
+      background: rgba(0, 240, 255, 0.06);
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.25), inset 0 0 10px rgba(0, 240, 255, 0.08);
+    }
+    #inp::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 12px 18px;
+      border: none;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .btn:active { transform: scale(0.96); }
+
+    .btn-send {
+      background: linear-gradient(135deg, #00f0ff 0%, #0088ff 100%);
+      color: #02070f;
+      box-shadow: 0 4px 16px rgba(0, 240, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+    .btn-send:hover {
+      box-shadow: 0 6px 22px rgba(0, 240, 255, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn-wake {
+      background: rgba(0, 255, 157, 0.08);
+      border: 1px solid rgba(0, 255, 157, 0.35);
+      color: var(--green);
+      display: none;
+    }
+    .btn-wake.show { display: block; }
+    .btn-wake:hover { background: rgba(0, 255, 157, 0.18); box-shadow: 0 0 14px rgba(0, 255, 157, 0.3); }
+
+    .btn-attach {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 12px 14px;
+      font-size: 16px;
+      line-height: 1;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .btn-attach:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0, 240, 255, 0.08);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+    }
 
     /* ── MIC BUTTON ── */
     #mic-btn {
-      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
-      padding: 11px 13px; font-size: 16px; line-height: 1; border-radius: 12px;
-      cursor: pointer; transition: opacity 0.15s, transform 0.1s, background 0.2s, border-color 0.2s;
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 12px 14px;
+      font-size: 16px;
+      line-height: 1;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
-    #mic-btn:hover  { opacity: 0.82; border-color: var(--accent); color: var(--accent); }
-    #mic-btn:active { transform: scale(0.96); }
+    #mic-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0, 240, 255, 0.08);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+    }
     #mic-btn.recording {
-      background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.45); color: #ef4444;
+      background: rgba(255, 59, 92, 0.18);
+      border-color: rgba(255, 59, 92, 0.55);
+      color: #ff3b5c;
       animation: mic-pulse 1s ease-in-out infinite;
+      box-shadow: 0 0 20px rgba(255, 59, 92, 0.4);
     }
     #mic-btn.unsupported { opacity: 0.3; cursor: not-allowed; }
-    @keyframes mic-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.65;transform:scale(0.97)} }
+    @keyframes mic-pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(0.96); opacity: 0.7; }
+    }
 
     /* ── TOAST ── */
     #toast {
-      position:fixed; top:66px; left:50%; transform:translateX(-50%) translateY(-8px);
-      background:rgba(34,197,94,0.16); border:1px solid rgba(34,197,94,0.4);
-      color:var(--green); font-size:12px; font-weight:700; letter-spacing:1px;
-      padding:7px 18px; border-radius:99px;
-      opacity:0; transition:opacity 0.22s,transform 0.22s;
-      pointer-events:none; white-space:nowrap;
+      position: fixed;
+      top: 76px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      background: rgba(4, 16, 28, 0.90);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 8px 22px;
+      border-radius: 99px;
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 255, 157, 0.3);
+      z-index: 99;
     }
-    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
   <div id="toast"></div>
+
   <header>
-    <div class="logo"><em>J</em>ARVIS</div>
-    <div class="pill" id="pill"><span class="dot"></span><span id="st">Connecting</span></div>
+    <!-- Interactive Mini Arc Reactor in Header -->
+    <div class="header-reactor" id="header-reactor" title="Toggle Arc Reactor Telemetry Display">
+      <canvas id="mini-reactor-canvas" width="76" height="76"></canvas>
+    </div>
+    <div class="brand-wrap">
+      <div class="logo"><em>J</em>ARVIS</div>
+      <div class="sub-brand">STARK MARK-LIV</div>
+    </div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="st">CONNECTING</span></div>
     <div class="enc-badge" id="enc">AES-256</div>
     <div class="spacer"></div>
     <div class="url">__IP__:__PORT__</div>
   </header>
+
+  <!-- Collapsible Holographic Reactor Visualizer Panel -->
+  <div id="reactor-panel">
+    <canvas id="main-reactor-canvas" width="280" height="280"></canvas>
+    <div class="reactor-status-tag" id="reactor-status">QUANTUM CORE ACTIVE</div>
+  </div>
+
   <main id="feed"></main>
+
   <footer>
-    <input id="inp" placeholder="Send a command to JARVIS…" autocomplete="off">
+    <input id="inp" placeholder="Transmit command to JARVIS…" autocomplete="off">
     <label class="btn-attach" for="file-inp" title="Send file">📎</label>
     <input type="file" id="file-inp" multiple accept="*/*" style="display:none">
     <button id="mic-btn" onclick="doMic()" title="Voice command">🎤</button>
@@ -153,6 +512,171 @@
   </footer>
 
   <script>
+    // ── STARK ARC REACTOR CANVAS ANIMATION ENGINES ────────────────────────────
+    const miniCanvas = document.getElementById('mini-reactor-canvas');
+    const miniCtx = miniCanvas.getContext('2d');
+    const mainCanvas = document.getElementById('main-reactor-canvas');
+    const mainCtx = mainCanvas.getContext('2d');
+    const reactorPanel = document.getElementById('reactor-panel');
+
+    let phase = 0;
+    let reactorAmp = 0.0;
+    let isSpeaking = false;
+
+    // Toggle reactor panel on clicking mini reactor
+    document.getElementById('header-reactor').addEventListener('click', () => {
+      reactorPanel.classList.toggle('collapsed');
+    });
+
+    function renderArcReactor(ctx, W, H, isMini = false) {
+      const cx = W / 2;
+      const cy = H / 2;
+      const r = W * 0.44;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Core Atmospheric Radial Glow
+      const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 0.95);
+      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.45)');
+      glowGrad.addColorStop(0.4, 'rgba(0, 136, 255, 0.18)');
+      glowGrad.addColorStop(0.8, 'rgba(0, 240, 255, 0.04)');
+      glowGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer Calibration Ring
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+      ctx.lineWidth = isMini ? 1.0 : 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (!isMini) {
+        // Laser Radial Calibration Ticks (60 ticks)
+        for (let i = 0; i < 60; i++) {
+          const ang = (i * 6 * Math.PI) / 180;
+          const isMajor = (i % 5 === 0);
+          const len = isMajor ? r * 0.10 : r * 0.05;
+          ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.7)' : 'rgba(0, 240, 255, 0.2)';
+          ctx.lineWidth = isMajor ? 1.8 : 1.0;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * (r - len), cy + Math.sin(ang) * (r - len));
+          ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
+          ctx.stroke();
+        }
+      }
+
+      // Smooth Counter-Rotating Kinetic Arcs
+      const arcLayers = isMini ? [
+        { rr: 0.90, span: 90, count: 2, dir: +1, spd: 0.05, col: '#00f0ff', wid: 2.0 },
+        { rr: 0.70, span: 70, count: 3, dir: -1, spd: 0.07, col: '#ffb700', wid: 1.8 }
+      ] : [
+        { rr: 0.94, span: 80,  count: 3, dir: +1, spd: 0.045, col: '#00f0ff', wid: 2.6 },
+        { rr: 0.84, span: 130, count: 2, dir: -1, spd: 0.035, col: 'rgba(0, 136, 255, 0.75)', wid: 2.0 },
+        { rr: 0.70, span: 55,  count: 4, dir: +1, spd: 0.065, col: '#ffb700', wid: 2.2 },
+        { rr: 0.60, span: 100, count: 2, dir: -1, spd: 0.040, col: '#00f0ff', wid: 1.6 }
+      ];
+
+      arcLayers.forEach(l => {
+        const rad = r * l.rr;
+        const base = phase * l.spd * l.dir;
+        const step = (Math.PI * 2) / l.count;
+        const spanRad = (l.span * Math.PI) / 180;
+
+        ctx.strokeStyle = l.col;
+        ctx.lineWidth = l.wid;
+
+        for (let s = 0; s < l.count; s++) {
+          const start = base + s * step;
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, start, start + spanRad);
+          ctx.stroke();
+
+          // Orbital Nano-Pips
+          if (!isMini && l.rr > 0.75) {
+            const pipAng = start + (l.dir > 0 ? spanRad : 0);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(pipAng) * rad, cy + Math.sin(pipAng) * rad, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      });
+
+      // Frequency Needles (Audio Reactive)
+      if (!isMini) {
+        const nSpikes = 40;
+        const rSpike = r * 0.44;
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.55)';
+        ctx.lineWidth = 1.4;
+        for (let i = 0; i < nSpikes; i++) {
+          const ang = (i * (360 / nSpikes) * Math.PI) / 180 + phase * 0.012;
+          const h = r * (0.03 + (0.02 + 0.12 * reactorAmp) * Math.sin(phase * 0.08 + i * 0.8));
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * rSpike, cy + Math.sin(ang) * rSpike);
+          ctx.lineTo(cx + Math.cos(ang) * (rSpike + h), cy + Math.sin(ang) * (rSpike + h));
+          ctx.stroke();
+        }
+      }
+
+      // Central Obsidian Glass Quantum Lens
+      const rInner = r * 0.33;
+      const lensGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rInner);
+      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.65)');
+      lensGrad.addColorStop(0.5, 'rgba(0, 30, 60, 0.95)');
+      lensGrad.addColorStop(1, 'rgba(0, 240, 255, 0.85)');
+
+      ctx.fillStyle = lensGrad;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = isMini ? 1.4 : 2.0;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      if (!isMini) {
+        // Hexagonal Quantum Lattice inside Lens
+        const rHex = rInner * 0.65;
+        const rotHex = -phase * 0.015;
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.40)';
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        for (let h = 0; h < 6; h++) {
+          const hAng = (h * 60 * Math.PI) / 180 + rotHex;
+          const hx = cx + Math.cos(hAng) * rHex;
+          const hy = cy + Math.sin(hAng) * rHex;
+          if (h === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Laser Typography inside Core
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 240, 255, 0.9)';
+        ctx.shadowBlur = 8;
+        ctx.fillText('ALFRED', cx, cy);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function animateReactors() {
+      const speed = 1.0 + (isSpeaking ? 1.5 : 0.0) + reactorAmp * 2.0;
+      phase += 1.2 * speed;
+
+      renderArcReactor(miniCtx, miniCanvas.width, miniCanvas.height, true);
+      if (!reactorPanel.classList.contains('collapsed')) {
+        renderArcReactor(mainCtx, mainCanvas.width, mainCanvas.height, false);
+      }
+      requestAnimationFrame(animateReactors);
+    }
+    requestAnimationFrame(animateReactors);
+
     // ── Auth — bearer token ───────────────────────────────────────────────────
     const _authToken  = sessionStorage.getItem('jarvis_token');
     const _sessionKey = sessionStorage.getItem('jarvis_key');
@@ -205,28 +729,31 @@
     const pill  = document.getElementById('pill');
     const stTxt = document.getElementById('st');
     const wake  = document.getElementById('wake');
+    const rStatus = document.getElementById('reactor-status');
 
     const _wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
     const _wsUrl   = `${_wsProto}://${location.host}/ws?token=${encodeURIComponent(_authToken)}`;
     const ws       = new WebSocket(_wsUrl);
 
-    ws.onopen    = () => { sys('Remote session active.'); toast('Connected to JARVIS'); };
-    ws.onclose   = () => sys('Connection lost — refresh to reconnect.');
-    ws.onerror   = () => sys('Connection error.');
+    ws.onopen    = () => { sys('Quantum link operational.'); toast('Link Established'); };
+    ws.onclose   = () => { sys('Link lost — refresh to reconnect.'); setStatus('sleeping'); };
+    ws.onerror   = () => sys('Link connection anomaly.');
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === 'log')           append(m.speaker, m.text);
       if (m.type === 'status')        setStatus(m.state);
-      if (m.type === 'wake')          sys('Wake word detected — connecting…');
+      if (m.type === 'wake')          sys('Wake signal acknowledged.');
       if (m.type === 'sys')           sys(m.text);
       if (m.type === 'file_received') _onFileReceived(m);
     };
 
     function setStatus(s) {
       if (s === 'active') {
-        pill.className = 'pill on'; stTxt.textContent = 'Active'; wake.classList.remove('show');
+        pill.className = 'pill on'; stTxt.textContent = 'ONLINE'; wake.classList.remove('show');
+        if (rStatus) rStatus.textContent = 'QUANTUM CORE ONLINE';
       } else {
-        pill.className = 'pill'; stTxt.textContent = 'Sleeping'; wake.classList.add('show');
+        pill.className = 'pill'; stTxt.textContent = 'STANDBY'; wake.classList.add('show');
+        if (rStatus) rStatus.textContent = 'STANDBY MATRIX';
       }
     }
 
@@ -234,10 +761,13 @@
       const d = document.createElement('div');
       if (speaker === 'jarvis') {
         d.className = 'msg msg-j';
-        d.innerHTML = `<div class="lbl">Jarvis</div>${esc(text)}`;
+        d.innerHTML = `<div class="lbl">JARVIS // MARK-LIV</div>${esc(text)}`;
+        isSpeaking = true;
+        reactorAmp = 0.8;
+        setTimeout(() => { isSpeaking = false; reactorAmp = 0.0; }, 3000);
       } else {
         d.className = 'msg msg-u';
-        d.innerHTML = `<div class="lbl">You</div>${esc(text)}`;
+        d.innerHTML = `<div class="lbl">COMMANDER</div>${esc(text)}`;
       }
       feed.appendChild(d);
       feed.scrollTop = feed.scrollHeight;
@@ -245,7 +775,7 @@
 
     function sys(text) {
       const d = document.createElement('div');
-      d.className = 'msg msg-sys'; d.textContent = text;
+      d.className = 'msg msg-sys'; d.textContent = `[SYS] ${text}`;
       feed.appendChild(d); feed.scrollTop = feed.scrollHeight;
     }
 
@@ -279,14 +809,13 @@
     function _uploadFile(file) {
       const id = 'fc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
 
-      // Create file card in feed
       const card = document.createElement('div');
       card.className = 'msg-file';
       card.id = id;
       card.innerHTML = `
         <div class="fc-icon">${_fileIcon(file.name)}</div>
         <div class="fc-meta">
-          <div class="fc-lbl">Sending</div>
+          <div class="fc-lbl">TRANSMITTING PACKET</div>
           <div class="fc-name">${esc(file.name)}</div>
           <div class="fc-size">${_fmtSize(file.size)}</div>
           <div class="fc-bar-wrap"><div class="fc-bar" id="${id}_bar"></div></div>
@@ -320,14 +849,14 @@
           const dlUrl = `/uploads/${encodeURIComponent(savedName)}?token=${encodeURIComponent(_authToken)}`;
           if (bar)  { bar.style.width = '100%'; bar.style.background = 'var(--green)'; }
           if (st)   { st.textContent = '✓'; st.className = 'fc-status done'; }
-          if (lbl)  lbl.textContent = 'Sent';
+          if (lbl)  lbl.textContent = 'TRANSMISSION COMPLETE';
           if (meta) meta.insertAdjacentHTML('beforeend',
-            `<a class="fc-dl" href="${dlUrl}" download="${esc(savedName)}">⬇ Download back</a>`);
-          toast('File sent!');
+            `<a class="fc-dl" href="${dlUrl}" download="${esc(savedName)}">⬇ Download File</a>`);
+          toast('File Transferred');
         } else {
           let errMsg = 'Upload failed';
           try { errMsg = JSON.parse(xhr.responseText).error || errMsg; } catch {}
-          if (bar) bar.style.background = '#f87171';
+          if (bar) bar.style.background = 'var(--err)';
           if (st)  { st.textContent = 'ERR'; st.className = 'fc-status err'; }
           if (lbl) lbl.textContent = errMsg;
         }
@@ -345,7 +874,6 @@
       xhr.send(fd);
     }
 
-    // File received by another WebSocket client (e.g., second open tab)
     function _onFileReceived(m) {
       const dlUrl = `/uploads/${encodeURIComponent(m.name)}?token=${encodeURIComponent(_authToken)}`;
       const card  = document.createElement('div');
@@ -353,7 +881,7 @@
       card.innerHTML = `
         <div class="fc-icon">${_fileIcon(m.name)}</div>
         <div class="fc-meta">
-          <div class="fc-lbl">Received</div>
+          <div class="fc-lbl">PACKET RECEIVED</div>
           <div class="fc-name">${esc(m.name)}</div>
           <div class="fc-size">${_fmtSize(m.size)}</div>
           <a class="fc-dl" href="${dlUrl}" download="${esc(m.name)}">⬇ Download</a>
@@ -362,13 +890,12 @@
       `;
       feed.appendChild(card);
       feed.scrollTop = feed.scrollHeight;
-      toast('File received on computer!');
+      toast('File Received');
     }
 
-    // File input change handler
     document.getElementById('file-inp').addEventListener('change', function () {
       Array.from(this.files).forEach(_uploadFile);
-      this.value = ''; // reset so the same file can be re-sent
+      this.value = '';
     });
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -388,7 +915,7 @@
     }
 
     function doWake() {
-      sys('Sending wake signal…');
+      sys('Sending wake command…');
       _authFetch('/api/wake', { method: 'POST' });
     }
 
@@ -416,9 +943,9 @@
       micBtn.innerHTML = '🎤';
       micBtn.title     = 'Voice — tap to speak';
       micBtn.classList.remove('recording');
+      reactorAmp = 0.0;
     }
 
-    // Float32 PCM → resample to 16 kHz + convert to Int16
     function _f32toPcm16(f32, srcRate) {
       let s = f32;
       if (srcRate !== 16000) {
@@ -435,30 +962,29 @@
     }
 
     function _showVoiceSetup() {
-      if (document.getElementById('voice-setup')) return; // show once
+      if (document.getElementById('voice-setup')) return;
       const origin = location.origin;
       const card = document.createElement('div');
       card.id = 'voice-setup';
       card.style.cssText = [
-        'align-self:stretch', 'background:rgba(99,102,241,0.07)',
-        'border:1px solid rgba(99,102,241,0.22)', 'border-radius:14px',
-        'padding:16px 18px', 'font-size:13px', 'line-height:1.8',
-        'animation:pop 0.18s ease'
+        'align-self:stretch', 'background:rgba(0,240,255,0.06)',
+        'border:1px solid rgba(0,240,255,0.22)', 'border-radius:16px',
+        'padding:16px 20px', 'font-size:13px', 'line-height:1.8',
+        'animation:pop 0.22s ease'
       ].join(';');
       card.innerHTML =
-        '<div style="font-weight:700;color:#818cf8;letter-spacing:.5px;margin-bottom:10px">🎤 One-time voice setup</div>' +
-        '<ol style="padding-left:18px;color:#8899aa;margin:0;display:flex;flex-direction:column;gap:4px">' +
-        '<li>Open a new tab → go to <span style="background:rgba(255,255,255,0.07);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px">chrome://flags</span></li>' +
-        '<li>Search: <strong style="color:#dde3ed">Insecure origins treated as secure</strong></li>' +
-        '<li>Paste this URL into the box:<br><span id="flags-url" style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:4px;font-family:monospace;font-size:11px;user-select:all;cursor:pointer">' + esc(origin) + '</span></li>' +
-        '<li>Set to <strong style="color:#22c55e">Enabled</strong> → tap <strong style="color:#dde3ed">Relaunch</strong></li>' +
-        '<li>Return here and tap 🎤</li>' +
+        '<div style="font-weight:800;color:#00f0ff;letter-spacing:1px;margin-bottom:10px">🎤 Mobile Voice Setup</div>' +
+        '<ol style="padding-left:18px;color:#8fa5bd;margin:0;display:flex;flex-direction:column;gap:5px">' +
+        '<li>Open a new tab → navigate to <span style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px">chrome://flags</span></li>' +
+        '<li>Search: <strong style="color:#ffffff">Insecure origins treated as secure</strong></li>' +
+        '<li>Paste this origin URL:<br><span id="flags-url" style="background:rgba(0,240,255,0.1);color:#00f0ff;padding:3px 8px;border-radius:6px;font-family:monospace;font-size:11px;user-select:all;cursor:pointer">' + esc(origin) + '</span></li>' +
+        '<li>Set to <strong style="color:#00ff9d">Enabled</strong> → tap <strong style="color:#ffffff">Relaunch</strong></li>' +
+        '<li>Return here and tap 🎤 to transmit voice.</li>' +
         '</ol>';
       feed.appendChild(card);
       feed.scrollTop = feed.scrollHeight;
-      // tap to copy
       card.querySelector('#flags-url').addEventListener('click', () => {
-        navigator.clipboard?.writeText(origin).then(() => toast('URL copied!')).catch(() => {});
+        navigator.clipboard?.writeText(origin).then(() => toast('Origin URL Copied')).catch(() => {});
       });
     }
 
@@ -476,12 +1002,11 @@
         });
       } catch (e) {
         sys(e.name === 'NotAllowedError'
-          ? 'Microphone denied — tap the address bar lock and allow microphone.'
+          ? 'Microphone permission denied.'
           : 'Mic error: ' + e.message);
         return;
       }
 
-      // 16 kHz context (fall back to native rate — _f32toPcm16 resamples)
       let ctx;
       try { ctx = new AudioContext({ sampleRate: 16000 }); }
       catch (_) { ctx = new AudioContext(); }
@@ -497,19 +1022,17 @@
         const rate = ctx.sampleRate;
         const src  = ctx.createMediaStreamSource(stream);
 
-        // AudioWorklet (modern) — runs in dedicated audio thread
         const wCode = `class J extends AudioWorkletProcessor{process(i){const c=i[0]?.[0];if(c)this.port.postMessage(c.slice());return true;}}registerProcessor('j',J);`;
         try {
           const burl = URL.createObjectURL(new Blob([wCode], { type: 'application/javascript' }));
           await ctx.audioWorklet.addModule(burl);
           URL.revokeObjectURL(burl);
           const nd = new AudioWorkletNode(ctx, 'j');
-          // Buffer to 1024 samples (64 ms at 16 kHz) before sending —
-          // matches PC mic chunk size, prevents queue flooding on the server.
           let _pbuf = [], _plen = 0;
           nd.port.onmessage = e => {
             const chunk = new Int16Array(_f32toPcm16(e.data, rate));
             _pbuf.push(chunk); _plen += chunk.length;
+            reactorAmp = 0.5 + Math.random() * 0.4;
             if (_plen >= 1024) {
               const out = new Int16Array(_plen); let off = 0;
               for (const c of _pbuf) { out.set(c, off); off += c.length; }
@@ -520,9 +1043,9 @@
           src.connect(nd);
           _audioNd = nd;
         } catch (_) {
-          // ScriptProcessor fallback (deprecated, still works everywhere)
           const sp = ctx.createScriptProcessor(4096, 1, 1);
           sp.onaudioprocess = e => {
+            reactorAmp = 0.5 + Math.random() * 0.4;
             if (ws.readyState === 1) ws.send(_f32toPcm16(e.inputBuffer.getChannelData(0), rate));
           };
           src.connect(sp); sp.connect(ctx.destination);
@@ -530,14 +1053,14 @@
         }
 
         micBtn.innerHTML = '⏹';
-        micBtn.title     = 'Tap to stop';
+        micBtn.title     = 'Tap to terminate voice channel';
         micBtn.classList.add('recording');
-        sys('Voice live — speak now');
-        toast('🎤 Live');
+        sys('Voice channel live.');
+        toast('🎤 Voice Relay Live');
       };
 
       ws.onclose = () => { _stopVoice(); };
-      ws.onerror = () => { sys('Voice connection failed.'); _stopVoice(); };
+      ws.onerror = () => { sys('Voice connection disrupted.'); _stopVoice(); };
 
       _voiceWs  = ws;
       _audioCtx = ctx;

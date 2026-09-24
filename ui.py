@@ -624,10 +624,10 @@ class HudCanvas(QWidget):
         # uses — one audio source, so the mouth can never drift out of sync.
         dt = now - self._step_t
         self._step_t = now
-        # Integrated, not derived from absolute time: multiplying wall-clock by
-        # a rate that changes with state jumps the rings the instant JARVIS
-        # starts talking. Same lesson the head's sway taught.
-        self._core_phase += min(0.10, max(0.0, dt))
+        # Integrated with rate so acceleration on speech or thinking transitions smoothly without phase jumps
+        _rate = 1.0 + (2.2 if self.state in ("THINKING", "PROCESSING") else 0.0) \
+                    + (1.4 if self.speaking else 0.0)
+        self._core_phase += min(0.10, max(0.0, dt)) * _rate
 
         if self._avatar is not None and self.hud_style == "face":
             self._avatar.step(dt, amp, speaking=self.speaking,
@@ -719,8 +719,7 @@ class HudCanvas(QWidget):
 
     def _paint_core(self, p: QPainter, cx: float, cy: float, r: float,
                     W: float = 0.0, H: float = 0.0):
-        """Draw the reactor at (cx, cy) with outer radius r, using the whole
-        canvas (W x H) for the marks that frame it."""
+        """Draw the Avengers: Endgame Stark Arc Reactor at (cx, cy) with outer radius r."""
         main, acc = self._core_colours()
         bg = qcol(C.BG)
         amp = self._amp_disp
@@ -728,9 +727,6 @@ class HudCanvas(QWidget):
         live = (self.speaking or amp > 0.04) and not self.muted
 
         def blend(col: QColor, a: float) -> QColor:
-            """Pre-mix onto the background instead of asking Qt to composite.
-            The raster engine's opaque path is several times faster than its
-            translucent one, and everything here is a line or an arc."""
             k = max(0.0, min(1.0, a))
             return QColor(int(bg.red()   + (col.red()   - bg.red())   * k),
                           int(bg.green() + (col.green() - bg.green()) * k),
@@ -738,42 +734,48 @@ class HudCanvas(QWidget):
 
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # 1. The atmosphere. One radial gradient doing what a stack of discs did
-        #    badly: a wide, soft body of light that gives the thing presence
-        #    before any detail is read. This single element decides whether the
-        #    HUD looks vast or looks small, so it is drawn first and drawn big.
-        # Concentrated rather than spread: a gradient reaching the outer rim
-        # washes the whole disc a flat dim blue and reads as fog. Ending it at
-        # two thirds leaves it a body of light with somewhere to fall off to,
-        # which is what makes it look lit rather than tinted.
-        lift = 1.0 + 0.55 * amp + (0.18 if self.speaking else 0.0)
+        # 1. Quantum Arc Energy Atmosphere (Deep radial multi-layer bloom)
+        lift = 1.0 + 0.95 * amp + (0.40 if self.speaking else 0.0)
         p.setPen(Qt.PenStyle.NoPen)
-        for gr, a0, a1 in ((r * 0.70, 0.30, 0.0), (r * 0.34, 0.34, 0.0)):
+        for gr, a0 in ((r * 0.90, 0.22), (r * 0.60, 0.35), (r * 0.38, 0.55), (r * 0.20, 0.70)):
             g = QRadialGradient(cx, cy, gr)
             g.setColorAt(0.00, blend(main, min(0.95, a0 * lift)))
-            g.setColorAt(0.45, blend(main, min(0.95, a0 * lift * 0.52)))
-            g.setColorAt(0.78, blend(main, min(0.95, a0 * lift * 0.18)))
-            g.setColorAt(1.00, blend(main, a1))
+            g.setColorAt(0.35, blend(main, min(0.95, a0 * lift * 0.55)))
+            g.setColorAt(0.70, blend(main, min(0.95, a0 * lift * 0.18)))
+            g.setColorAt(1.00, blend(main, 0.0))
             p.setBrush(QBrush(g))
             p.drawEllipse(QRectF(cx - gr, cy - gr, gr * 2, gr * 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # 2. Frame marks at the corners of the whole canvas, not of the circle.
-        #    They are what set the scale: the eye reads the reactor as filling
-        #    the room rather than sitting in the middle of it.
-        if W > 40 and H > 40:
-            m, arm = min(W, H) * 0.035, min(W, H) * 0.055
+        # 2. Precision Stark Corner Reticles & Telemetry Badges
+        if W > 60 and H > 60:
+            m, arm = min(W, H) * 0.035, min(W, H) * 0.06
             p.setPen(QPen(blend(main, 0.45), 1.4))
             for sx, sy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
                 x = cx + sx * (W / 2 - m)
                 y = cy + sy * (H / 2 - m)
                 p.drawLine(QLineF(x, y, x - sx * arm, y))
                 p.drawLine(QLineF(x, y, x, y - sy * arm))
+                p.setPen(QPen(blend(main, 0.25), 1.0))
+                p.drawLine(QLineF(x - sx * 4, y, x - sx * 8, y))
+                p.drawLine(QLineF(x, y - sy * 4, x, y - sy * 8))
 
-        # 3. Crosshair across the full canvas, broken around the core so it
-        #    frames the reactor rather than crossing it.
+            # Corner micro telemetry tags
+            f_tele = tech_font(7, QFont.Weight.Medium, letter_spacing=1.0)
+            p.setFont(f_tele)
+            p.setPen(QPen(blend(main, 0.40), 1))
+            p.drawText(QRectF(cx - W / 2 + m + 6, cy - H / 2 + m, 120, 14),
+                       Qt.AlignmentFlag.AlignLeft, "MK-LIV // ARC-GEN")
+            p.drawText(QRectF(cx + W / 2 - m - 126, cy - H / 2 + m, 120, 14),
+                       Qt.AlignmentFlag.AlignRight, "FREQ 142.8MHz")
+            p.drawText(QRectF(cx - W / 2 + m + 6, cy + H / 2 - m - 14, 120, 14),
+                       Qt.AlignmentFlag.AlignLeft, "FLUX: 99.8%")
+            p.drawText(QRectF(cx + W / 2 - m - 126, cy + H / 2 - m - 14, 120, 14),
+                       Qt.AlignmentFlag.AlignRight, "STARK INDUSTRIES")
+
+        # 3. Holographic Reticle Crosshairs with Precision Target Gaps
         p.setPen(QPen(blend(main, 0.16), 1))
-        gap = r * 0.62
+        gap = r * 0.58
         if W > 40:
             p.drawLine(QLineF(cx - W / 2, cy, cx - gap, cy))
             p.drawLine(QLineF(cx + gap, cy, cx + W / 2, cy))
@@ -781,84 +783,172 @@ class HudCanvas(QWidget):
             p.drawLine(QLineF(cx, cy - H / 2, cx, cy - gap))
             p.drawLine(QLineF(cx, cy + gap, cx, cy + H / 2))
 
-        # 4. Two thin outer circles. Sparse on purpose — a dense ring reads as a
-        #    grey band at this size, and restraint is what made the original
-        #    look expensive.
-        for rr, a in ((1.00, 0.34), (0.93, 0.16)):
+        # 4. Concentric High-Tech Outer Rings
+        for rr, a, wid in ((1.00, 0.35, 1.2), (0.94, 0.20, 1.0), (0.86, 0.15, 1.0)):
             rad = r * rr
-            p.setPen(QPen(blend(main, a), 1))
+            p.setPen(QPen(blend(main, a), wid))
             p.drawEllipse(QRectF(cx - rad, cy - rad, rad * 2, rad * 2))
 
-        # 5. Long, sparse graduations: 24 majors reaching well in from the rim,
-        #    with shorter minors between them.
+        # 5. Laser Calibration Graduations (72 radial ticks with 12 primary markers)
         major, minor = [], []
         for i in range(72):
-            a = math.radians(i * 5.0)
-            ca, sa = math.cos(a), math.sin(a)
-            if i % 3 == 0:
-                major.append(QLineF(cx + ca * r * 0.885, cy + sa * r * 0.885,
-                                    cx + ca * r * 0.985, cy + sa * r * 0.985))
+            ang = math.radians(i * 5.0)
+            ca, sa = math.cos(ang), math.sin(ang)
+            if i % 6 == 0:
+                major.append(QLineF(cx + ca * r * 0.88, cy + sa * r * 0.88,
+                                    cx + ca * r * 0.99, cy + sa * r * 0.99))
             else:
-                minor.append(QLineF(cx + ca * r * 0.945, cy + sa * r * 0.945,
-                                    cx + ca * r * 0.985, cy + sa * r * 0.985))
-        p.setPen(QPen(blend(main, 0.42), 1.3))
+                minor.append(QLineF(cx + ca * r * 0.94, cy + sa * r * 0.94,
+                                    cx + ca * r * 0.99, cy + sa * r * 0.99))
+        p.setPen(QPen(blend(main, 0.55), 1.4))
         p.drawLines(major)
-        p.setPen(QPen(blend(main, 0.18), 1))
+        p.setPen(QPen(blend(main, 0.22), 1.0))
         p.drawLines(minor)
 
-        # 6. Sweeping arcs. Long spans, not dashes — the original's grandeur
-        #    came from a few big strokes. Speed is the state: idle drifts,
-        #    thinking hurries, speaking runs.
-        rate = 1.0 + (1.9 if self.state in ("THINKING", "PROCESSING") else 0.0) \
-                   + (1.2 if self.speaking else 0.0)
-        for k, (rr, span, count, dirn, col, a, wid) in enumerate((
-                (0.955, 118, 2, +1, acc,  0.75, 2.0),
-                (0.845, 82,  3, -1, main, 0.38, 1.3),
-                (0.760, 150, 1, +1, acc,  0.45, 1.6),
-                (0.660, 64,  4, -1, main, 0.26, 1.1),
-                (0.545, 128, 2, +1, main, 0.30, 1.2))):
+        # 6. Cardinal Telemetry Digits [000, 090, 180, 270] on outer calibration band
+        f_card = tech_font(7, QFont.Weight.Bold, letter_spacing=0.5)
+        p.setFont(f_card)
+        p.setPen(QPen(blend(main, 0.50), 1))
+        p.drawText(QRectF(cx - 15, cy - r * 1.06, 30, 12), Qt.AlignmentFlag.AlignCenter, "000")
+        p.drawText(QRectF(cx + r * 1.01, cy - 6, 26, 12), Qt.AlignmentFlag.AlignLeft, "090")
+        p.drawText(QRectF(cx - 15, cy + r * 1.00, 30, 12), Qt.AlignmentFlag.AlignCenter, "180")
+        p.drawText(QRectF(cx - r * 1.01 - 26, cy - 6, 26, 12), Qt.AlignmentFlag.AlignRight, "270")
+
+        # 7. Segmented Rotating Nano-Aperture Ring (36 interlocking gear notches)
+        n_teeth = 36
+        aperture_r = r * 0.77
+        tooth_lines = []
+        base_rot = (t * 8.0) % 360.0
+        for i in range(n_teeth):
+            ang = math.radians(i * (360.0 / n_teeth) + base_rot)
+            ca, sa = math.cos(ang), math.sin(ang)
+            tooth_lines.append(QLineF(cx + ca * (aperture_r - 2.5), cy + sa * (aperture_r - 2.5),
+                                      cx + ca * (aperture_r + 2.5), cy + sa * (aperture_r + 2.5)))
+        p.setPen(QPen(blend(main, 0.28), 1.2))
+        p.drawLines(tooth_lines)
+
+        # 8. Smooth Kinetic Energy Arcs (Endgame Counter-Rotating Holo-Rings)
+        arc_layers = (
+            (0.965, 95,  3, +1, 14.0, acc,  0.80, 2.2),
+            (0.895, 140, 2, -1, 10.0, main, 0.50, 1.8),
+            (0.820, 60,  4, +1, 20.0, acc,  0.65, 1.5),
+            (0.740, 110, 2, -1, 15.0, main, 0.40, 1.4),
+            (0.640, 45,  5, +1, 28.0, main, 0.35, 1.2),
+            (0.560, 120, 2, -1, 18.0, acc,  0.55, 1.6),
+        )
+
+        for rr, span, count, dirn, spd, col, a, wid in arc_layers:
             rad = r * rr
             p.setPen(QPen(blend(col, a), wid))
             box = QRectF(cx - rad, cy - rad, rad * 2, rad * 2)
-            base = (t * rate * (9 + k * 6) * dirn) % 360.0
+            base = (t * spd * dirn) % 360.0
+            step = 360.0 / count
             for sgm in range(count):
-                p.drawArc(box, int((base + sgm * (360.0 / count)) * 16),
-                          int(span * 16))
+                start_deg = base + sgm * step
+                p.drawArc(box, int(start_deg * 16), int(span * 16))
 
-        # 7. The voice, as a ring of graduations that grow with it. Kept out at
-        #    a wide radius so it never crowds the middle.
-        n = 60
-        ring = r * 0.415
+                # Glowing Orbital Nano-Pips on leading edges of primary arcs
+                if rr > 0.80:
+                    lead_rad = math.radians(start_deg + (span if dirn > 0 else 0))
+                    px = cx + math.cos(lead_rad) * rad
+                    py = cy + math.sin(lead_rad) * rad
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QBrush(blend(qcol(C.WHITE), 0.9)))
+                    p.drawEllipse(QPointF(px, py), 2.2, 2.2)
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # 9. Quantum Audio Burst / Frequency Reactor Needles
+        n_spikes = 64
+        ring_spk = r * 0.44
         spikes = []
-        for i in range(n):
-            a = math.radians(i * (360.0 / n))
-            ca, sa = math.cos(a), math.sin(a)
-            wob = 0.5 + 0.5 * math.sin(t * 2.3 + i * 0.42)
-            idle = 0.018 + 0.012 * math.sin(t * 1.2 + i * 0.7)
-            h = r * (idle + (amp * 0.20 * wob if live else 0.0))
-            spikes.append(QLineF(cx + ca * ring, cy + sa * ring,
-                                 cx + ca * (ring + h), cy + sa * (ring + h)))
-        p.setPen(QPen(blend(acc if live else main, 0.25 + 0.5 * amp), 1.6))
+        for i in range(n_spikes):
+            ang = math.radians(i * (360.0 / n_spikes) + t * 8.0)
+            ca, sa = math.cos(ang), math.sin(ang)
+            wob = 0.5 + 0.5 * math.sin(t * 3.2 + i * 0.5)
+            idle = 0.02 + 0.015 * math.sin(t * 1.5 + i * 0.8)
+            h = r * (idle + (amp * 0.22 * wob if live else 0.0))
+            spikes.append(QLineF(cx + ca * ring_spk, cy + sa * ring_spk,
+                                 cx + ca * (ring_spk + h), cy + sa * (ring_spk + h)))
+        p.setPen(QPen(blend(acc if live else main, 0.40 + 0.55 * amp), 1.5))
         p.drawLines(spikes)
 
-        # 8. The inner ring the name sits in.
-        inner = r * 0.355
-        p.setPen(QPen(blend(acc, 0.30 + 0.45 * amp), 1.5))
-        p.drawEllipse(QRectF(cx - inner, cy - inner, inner * 2, inner * 2))
+        # 10. Reactor Core Triad Magnetic Containment Nodes (Iconic Mark 85 Arc Triad)
+        tri_r = r * 0.38
+        p.setPen(QPen(blend(main, 0.65), 1.8))
+        for i in range(3):
+            c_ang = math.radians(i * 120.0 + t * 4.0)
+            ca, sa = math.cos(c_ang), math.sin(c_ang)
+            # Dual containment rails
+            p.drawLine(QLineF(cx + ca * (tri_r - 5), cy + sa * (tri_r - 5),
+                              cx + ca * (tri_r + 9), cy + sa * (tri_r + 9)))
+            # Glowing power capacitor
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(blend(acc, 0.90)))
+            p.drawEllipse(QPointF(cx + ca * (tri_r + 10), cy + sa * (tri_r + 10)), 3.0, 3.0)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(blend(main, 0.65), 1.8))
 
-        # 9. The name, sized from the string rather than from the radius alone:
-        #    "J.A.R.V.I.S" and a name someone renamed to "MAX" are very
-        #    different widths, and a fixed fraction of r spills one of them past
-        #    the ring it is supposed to sit inside.
+        # 6 Secondary Flux Nodes
+        coil_r = r * 0.38
+        p.setPen(QPen(blend(main, 0.40), 1.2))
+        for i in range(6):
+            if i % 2 != 0:
+                c_ang = math.radians(i * 60.0 + t * 4.0)
+                ca, sa = math.cos(c_ang), math.sin(c_ang)
+                p.drawLine(QLineF(cx + ca * (coil_r - 3), cy + sa * (coil_r - 3),
+                                  cx + ca * (coil_r + 5), cy + sa * (coil_r + 5)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(blend(main, 0.70)))
+                p.drawEllipse(QPointF(cx + ca * (coil_r + 6), cy + sa * (coil_r + 6)), 1.8, 1.8)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(blend(main, 0.40), 1.2))
+
+        # 11. Inner Central Quantum Core Lens
+        inner_r = r * 0.34
+        core_box = QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
+
+        # Multi-stop Obsidian Glass Lens Gradient with rich inner glow
+        core_grad = QRadialGradient(cx, cy, inner_r)
+        core_grad.setColorAt(0.00, blend(main, 0.32 + 0.58 * amp))
+        core_grad.setColorAt(0.50, blend(main, 0.14 + 0.28 * amp))
+        core_grad.setColorAt(0.85, blend(qcol(C.DARK), 0.95))
+        core_grad.setColorAt(1.00, blend(main, 0.65 + 0.35 * amp))
+        p.setBrush(QBrush(core_grad))
+        p.setPen(QPen(blend(acc if live else main, 0.85), 2.0))
+        p.drawEllipse(core_box)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Internal Quantum Hexagon Emitter Grid (faint cyber lattice inside the lens)
+        hex_pts = []
+        hex_r = inner_r * 0.65
+        for h in range(6):
+            h_ang = math.radians(h * 60.0 - t * 3.0)
+            hex_pts.append(QPointF(cx + math.cos(h_ang) * hex_r, cy + math.sin(h_ang) * hex_r))
+        p.setPen(QPen(blend(main, 0.18 + 0.15 * amp), 1.0))
+        for h in range(6):
+            p.drawLine(hex_pts[h], hex_pts[(h + 1) % 6])
+            p.drawLine(hex_pts[h], QPointF(cx, cy))
+
+        # Specular 3D glass reflection arc at top of lens
+        p.setPen(QPen(blend(qcol(C.WHITE), 0.42), 1.5))
+        p.drawArc(core_box, 35 * 16, 110 * 16)
+
+        # 12. The Assistant Designation (Crisp Laser-White Typography with Emissive Glow)
         name = self._assistant_name or ""
         if name:
-            space = max(1.0, r * 0.024)
-            fsz = max(8, int(min(r * 0.11,
-                                 (inner * 1.75) / max(1, len(name)) * 1.6 - space)))
+            space = max(1.2, inner_r * 0.05)
+            fsz = max(9, int(min(inner_r * 0.26, (inner_r * 1.8) / max(1, len(name)) * 1.5 - space)))
             f = tech_font(fsz, QFont.Weight.Bold, letter_spacing=space)
             p.setFont(f)
-            p.setPen(QPen(blend(qcol(C.WHITE), 0.7 + 0.3 * min(1.0, amp * 2)), 1))
-            p.drawText(QRectF(cx - r, cy - fsz, r * 2, fsz * 2),
+
+            # Glow shadow for laser typography
+            p.setPen(QPen(blend(main, 0.55 + 0.40 * amp), 2))
+            p.drawText(QRectF(cx - inner_r + 1, cy - fsz + 1, inner_r * 2, fsz * 2),
+                       Qt.AlignmentFlag.AlignCenter, name)
+
+            # Laser crisp text
+            p.setPen(QPen(blend(qcol(C.WHITE), 0.92 + 0.08 * min(1.0, amp * 2)), 1))
+            p.drawText(QRectF(cx - inner_r, cy - fsz, inner_r * 2, fsz * 2),
                        Qt.AlignmentFlag.AlignCenter, name)
 
     def paintEvent(self, _):
