@@ -144,16 +144,16 @@
     "semantic_hash": "b48e2520ddbf3990b0cec3b99dd85279"
   },
   "core/avatar.py": {
-    "mtime": 1790275670.9022417,
-    "seen": 1790278410.9365003,
-    "ast_hash": "c4b5c4733d33931c5c85280adb253bbb",
-    "semantic_hash": "c4b5c4733d33931c5c85280adb253bbb"
+    "mtime": 1790315441.706141,
+    "seen": 1790315500.1526818,
+    "ast_hash": "ef888a6d91035143f1b2c62f1e326431",
+    "semantic_hash": ""
   },
   "core/avatar_mesh.py": {
-    "mtime": 1790275670.9022417,
-    "seen": 1790278410.9365003,
-    "ast_hash": "7d1c74ab8826e97f1f2a662995f111bb",
-    "semantic_hash": "7d1c74ab8826e97f1f2a662995f111bb"
+    "mtime": 1790315426.1360817,
+    "seen": 1790315500.1526818,
+    "ast_hash": "e9f0eaa285a951458647af474593e066",
+    "semantic_hash": ""
   },
   "core/confirm.py": {
     "mtime": 1790275670.906108,
@@ -288,9 +288,9 @@
     "semantic_hash": "f53c633e0d8d9d64b041acb426dd4807"
   },
   "ui.py": {
-    "mtime": 1790315128.3623016,
-    "seen": 1790315158.0359132,
-    "ast_hash": "8c3e6c91889bc90593be9d9bf72793e6",
+    "mtime": 1790315464.904565,
+    "seen": 1790315500.153664,
+    "ast_hash": "a0352d39dc15c541174cbe2a010844e1",
     "semantic_hash": ""
   },
   ".agents/rules/graphify.md": {
@@ -417,6 +417,42 @@
     "mtime": 1790284343.139921,
     "seen": 1790284406.3483229,
     "ast_hash": "6db7a42e3ca9f6eaa14b7b184ff85b40",
+    "semantic_hash": ""
+  },
+  "scratch/export_cowl_obj.py": {
+    "mtime": 1790315366.7445235,
+    "seen": 1790315500.153664,
+    "ast_hash": "db9c64c7cfcbef5786b0451103a222bb",
+    "semantic_hash": ""
+  },
+  "scratch/generate_alfred_icons.py": {
+    "mtime": 1790315277.9941297,
+    "seen": 1790315500.153664,
+    "ast_hash": "85551600dbed682c7c98bed9233354a1",
+    "semantic_hash": ""
+  },
+  "scratch/test_cowl_mesh.py": {
+    "mtime": 1790315347.8956068,
+    "seen": 1790315500.153664,
+    "ast_hash": "11822895f314626a60db7d6989b7e2c6",
+    "semantic_hash": ""
+  },
+  "config/alfred.png": {
+    "mtime": 1790315289.0065298,
+    "seen": 1790315500.153664,
+    "ast_hash": "4e18de5b79fc804bbe903725d59132b8",
+    "semantic_hash": ""
+  },
+  "config/alfred_bg.png": {
+    "mtime": 1790315289.0334377,
+    "seen": 1790315500.153664,
+    "ast_hash": "4e18de5b79fc804bbe903725d59132b8",
+    "semantic_hash": ""
+  },
+  "config/batman_logo.png": {
+    "mtime": 1790315289.0539944,
+    "seen": 1790315500.153664,
+    "ast_hash": "4e18de5b79fc804bbe903725d59132b8",
     "semantic_hash": ""
   }
 }
