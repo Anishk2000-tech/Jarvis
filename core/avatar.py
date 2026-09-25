@@ -125,7 +125,20 @@ class HoloAvatar:
     shaded = True
 
     def __init__(self) -> None:
-        mesh = get_head_mesh()
+        self._lut_cache: list = []
+        self._lut_key = None
+        self._t = 0.0
+        self._sway = 0.0           # integrated sway phase — see step()
+        self._yaw = 0.0
+        self._pitch = 0.0
+        self._mouth = 0.0          # 0..1 smoothed jaw opening
+        self._glow = 0.0           # 0..1 smoothed overall energy
+        self._scan = -1.6          # vertical position of the energy sweep
+        self._blink = 0.0          # 0 = open, 1 = shut
+        self.reload_mesh()
+
+    def reload_mesh(self, with_cowl: bool | None = None) -> None:
+        mesh = get_head_mesh(with_cowl)
         self._v0 = mesh["verts"]
         self._n0 = mesh["normals"]
         self._jaw = mesh["jaw"]
@@ -139,30 +152,11 @@ class HoloAvatar:
         self._e0 = mesh["edges"][:, 0]
         self._e1 = mesh["edges"][:, 1]
         self._lm = mesh["landmarks"]
-        # The inner-lip ring runs lower-lip left→right, then upper-lip back.
-        # Splitting it lets the upper arc anchor a strip of teeth, which is what
-        # keeps an open mouth from reading as a hole punched in the face.
         lips_in = mesh["landmarks"]["lips_in"]
         self._lip_up = np.concatenate([lips_in[10:], lips_in[:1]])
-
-        # Crown (+1.0) down to the bottom of the neck, in head-half-heights.
-        # Callers size the head to the room they have with this.
         self.SPAN = mesh["span"][0] - mesh["span"][1]
-
-        self._lut_cache: list = []
-        self._lut_key = None
-
         n = self._v0.shape[0]
         self._v = np.empty((n, 3), dtype=np.float32)
-
-        self._t = 0.0
-        self._sway = 0.0           # integrated sway phase — see step()
-        self._yaw = 0.0
-        self._pitch = 0.0
-        self._mouth = 0.0          # 0..1 smoothed jaw opening
-        self._glow = 0.0           # 0..1 smoothed overall energy
-        self._scan = -1.6          # vertical position of the energy sweep
-        self._blink = 0.0          # 0 = open, 1 = shut
         self._blink_at = 3.0
 
         # ── expression ──────────────────────────────────────────────────────

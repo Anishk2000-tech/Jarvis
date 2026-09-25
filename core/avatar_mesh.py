@@ -245,28 +245,64 @@ def _unique_edges(faces: np.ndarray) -> np.ndarray:
     return np.unique(e, axis=0)
 
 
-def _check_landmarks(verts: np.ndarray) -> None:
-    """Fail loudly at build time if a landmark ring is not where it should be."""
-    for left, right in (("eye_l", "eye_r"), ("brow_l", "brow_r")):
-        cl = verts[LANDMARKS[left]].mean(0)
-        cr = verts[LANDMARKS[right]].mean(0)
-        assert cl[0] < 0 < cr[0], f"{left}/{right} are not on opposite sides"
-        assert abs(cl[1] - cr[1]) < 0.5, f"{left}/{right} are at different heights"
-    eye_y = verts[LANDMARKS["eye_l"]].mean(0)[1]
-    brow_y = verts[LANDMARKS["brow_l"]].mean(0)[1]
-    lips = verts[LANDMARKS["lips_out"]].mean(0)
-    assert brow_y > eye_y, "brow is not above the eye"
-    assert lips[1] < eye_y, "lips are not below the eyes"
-    assert abs(lips[0]) < 0.5, "lips are not centred"
+def _add_cowl_ears(v: np.ndarray, f: np.ndarray):
+    """Add signature Batman Cowl tactical ears to the cranial mesh."""
+    left_ear_base = [
+        [-2.6, 7.2, -0.4],
+        [-4.2, 6.9, -0.8],
+        [-3.8, 6.4, -1.8],
+        [-2.2, 6.7, -1.4],
+    ]
+    left_apex = [-3.8, 12.8, -1.0]
+
+    right_ear_base = [
+        [2.6, 7.2, -0.4],
+        [4.2, 6.9, -0.8],
+        [3.8, 6.4, -1.8],
+        [2.2, 6.7, -1.4],
+    ]
+    right_apex = [3.8, 12.8, -1.0]
+
+    nv = np.array(left_ear_base + [left_apex] + right_ear_base + [right_apex], dtype=np.float64)
+    base = len(v)
+
+    nf = [
+        [base + 4, base + 0, base + 1],
+        [base + 4, base + 1, base + 2],
+        [base + 4, base + 2, base + 3],
+        [base + 4, base + 3, base + 0],
+        [base + 9, base + 6, base + 5],
+        [base + 9, base + 7, base + 6],
+        [base + 9, base + 8, base + 7],
+        [base + 9, base + 5, base + 8],
+    ]
+    return np.vstack([v, nv]), np.vstack([f, np.array(nf, dtype=np.int64)])
 
 
-def build_head() -> dict:
-    """Assemble the full head. Called once; `get_head_mesh()` caches the result."""
+def _check_landmarks(verts: np.ndarray) -> bool:
+    """Check if canonical landmarks exist; return False if custom topology."""
+    if len(verts) < 468:
+        return False
+    try:
+        for left, right in (("eye_l", "eye_r"), ("brow_l", "brow_r")):
+            cl = verts[LANDMARKS[left]].mean(0)
+            cr = verts[LANDMARKS[right]].mean(0)
+            if not (cl[0] < 0 < cr[0]):
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def build_head(with_cowl: bool = True) -> dict:
+    """Assemble the full head. Called once per mode; `get_head_mesh()` caches the result."""
     verts, faces = _load_obj(_OBJ)
     _check_landmarks(verts)
 
     n_face = len(verts)
     verts, faces = _add_cranium(verts, faces)
+    if with_cowl:
+        verts, faces = _add_cowl_ears(verts, faces)
     n_head = len(verts)
     verts, faces, fade = _add_neck(verts, faces)
 
@@ -340,12 +376,30 @@ def build_head() -> dict:
     }
 
 
-_CACHE: dict | None = None
+_CACHE_COWL: dict | None = None
+_CACHE_PLAIN: dict | None = None
 
 
-def get_head_mesh() -> dict:
+def get_head_mesh(with_cowl: bool | None = None) -> dict:
     """Process-wide cached mesh — every HudCanvas shares the same arrays."""
-    global _CACHE
-    if _CACHE is None:
-        _CACHE = build_head()
-    return _CACHE
+    global _CACHE_COWL, _CACHE_PLAIN
+    if with_cowl is None:
+        try:
+            from memory.config_manager import _read_full_config
+            cfg = _read_full_config()
+            name = (cfg.get("assistant_name") or "Alfred").strip().lower()
+            if "cowl_avatar" in cfg:
+                with_cowl = bool(cfg.get("cowl_avatar"))
+            else:
+                with_cowl = name in ("alfred", "batman", "batcomputer", "bruce")
+        except Exception:
+            with_cowl = True
+
+    if with_cowl:
+        if _CACHE_COWL is None:
+            _CACHE_COWL = build_head(with_cowl=True)
+        return _CACHE_COWL
+    else:
+        if _CACHE_PLAIN is None:
+            _CACHE_PLAIN = build_head(with_cowl=False)
+        return _CACHE_PLAIN

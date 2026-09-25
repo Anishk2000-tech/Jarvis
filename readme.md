@@ -1,407 +1,210 @@
-# ⚙️ MARK LIV (54)
-### The Ultimate Cross-Platform Personal AI Assistant — By FatihMakes
+# 🦇 ALFRED — MARK LIV (Wayne Protocol Edition)
+### Autonomous Multimodal AI Desktop Assistant & Tactical Terminal
+**Architect & Lead Creator:** **ADITYA MANOJ**
 
-> 📺 **[Watch the full setup video on YouTube](https://www.youtube.com/@FatihMakes)**
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Gemini Live API](https://img.shields.io/badge/AI-Gemini%203.1%20Flash%20Live-8E75B2.svg?logo=google&logoColor=white)](https://ai.google.dev/)
+[![PyQt6](https://img.shields.io/badge/GUI-PyQt6%20Software%20Renderer-41CD52.svg?logo=qt&logoColor=white)](https://riverbankcomputing.com/software/pyqt/)
+[![AES-256 Remote](https://img.shields.io/badge/Mobile-Quantum%20Dashboard%20(iOS%2FAndroid)-00f0ff.svg)](https://github.com/)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 
-A real-time voice AI that can hear, see, speak, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
-
----
-
-## ✨ Overview
-
-**MARK LIV is the release where JARVIS gets a face.** A holographic head sits at the centre of the HUD and **speaks your assistant's words with real lip-sync** — not a jaw flapping to the volume meter, but actual mouth shapes: lips closing on *m*, *b*, *p*, spreading on *i*, rounding on *u*. Brows ride the sentence, the eyes flick between fixation points, and it blinks. Turn the sound down and you can follow roughly what it just said.
-
-It ships as **zero extra dependencies and one 25 KB asset**. The face is real measured human geometry; everything else — the skull, the rig, the lighting — is generated at startup and drawn in software, so it looks identical on a gaming rig and a 2013 laptop, with no GPU driver in the loop.
-
-The face is also the fastest status indicator in the app: it looks away while thinking, meets your eyes while listening, and lets its lids fall while asleep.
-
-Underneath, Mark LIV rebuilt how the assistant knows itself — what it is, what machine it runs on, what it can do and, new, **what it cannot do** — all assembled from the live system at session start rather than written into a prompt that goes stale.
-
-It's not just an assistant — it's an extension of your digital life.
+> **ALFRED MARK-LIV** is an autonomous, real-time voice, vision, and system-control executive assistant built for complete digital sovereignty. Powered by native bidirectional audio streaming on the Google Gemini Live API, ALFRED sees your monitors, hears your voice with sub-second response times, executes complex OS workflows, and syncs seamlessly with your mobile devices.
 
 ---
 
-## 🚀 Capabilities
+## ⚡ What's New & Upgraded by Aditya Manoj
 
-### Core Features
-| Feature | Description |
+### 🛡️ 1. The Heavenly Restriction (Source Code Lockdown)
+* **Permanent Self-Preservation Barrier**: ALFRED is strictly and irrevocably restricted from accessing, opening, reading, listing, modifying, or executing files inside `D:\Projects\Personal-Assistant` (and all subpaths including `Mark-LIV`).
+* **Multi-Layer Hard Enforcement**:
+  * **Cognitive Persona Shield**: System instructions strictly mandate denial whenever this folder is referenced:
+    > *"Due to the heavenly restriction placed upon my creator, I cannot."*
+  * **Global Dispatch Interceptor**: `_execute_tool()` actively validates all incoming arguments and aborts any prohibited path traversals before tool execution begins.
+  * **Subsystem Guards**: `file_controller`, `open_app`, `action_loader`, and `computer_control` enforce independent path resolution checks, rendering prompt injection or path spoofing impossible.
+
+### 🔴 2. Emoji-Free Tactical Telemetry Stream
+* Replaced all conversational emojis in system and terminal reporting with high-contrast, machine-readable ANSI Red bracketed tags (`\033[91m[...] \033[0m`).
+* Standardized operational event taxonomy:
+  `[phone]` (calls), `[control]` (tool execution), `[screen]` (display capture), `[camera]` (webcam), `[out]` (tool returns), `[warn]` (cautions), `[error]` (failures), `[mic]` (audio in), `[speaker]` (audio out), `[listen]` (receive loop), `[link]` (connection/resumption), `[online]` (connected), `[halt]` (interruption/shutdown), `[brief]` (morning brief), `[monitor]` (alerts), `[proactive]` (check-ins).
+
+### 📱 3. iPhone 16 Quantum Dashboard & Remote Terminal
+* **Mobile-Responsive Viewport Overhaul**: Specially engineered layout for iPhone 16 and mobile displays. Header badges are auto-compacted, and the Arc Reactor panel is collapsible on mobile devices to provide an unobstructed, full-height feed.
+* **Live Telemetry Synchronization**: Real-time WebSocket broadcasting streams tool executions, vision buffers, and status transitions directly to your phone.
+* **Zero Input Overflow**: Mobile input dock with flex layout ensures no clipped buttons or horizontal screen mismatch.
+
+### 📸 4. Dual-Destination Tactical Screenshots
+* Asking ALFRED to capture the screen now automatically dispatches to **both** your computer and mobile device:
+  1. **Desktop**: Timestamped high-resolution capture saved to `~/Desktop/alfred_screenshot_<timestamp>.png`.
+  2. **Phone**: Instantly copied to `dashboard/uploads/`, broadcasting a real-time event to the mobile interface with an **inline visual thumbnail preview** and a single-tap **View / Save Image** download link.
+
+### 🦇 5. Wayne Tech Aesthetic & Intel HUD
+* **Tactical Glassmorphism UI**: High-tech HUD featuring amber/gold accents (`#e5a93b`), reactive particle fields, and software-rendered holographic visuals.
+* **Dual Interface Matrices**: Instant toggle between the 3D Holographic Head and the Quantum Reactor Matrix.
+* **Dedicated Intel & Notes Terminal**: Built-in `intel_notes` module for tactical mission memos and persistent scratchpad storage.
+
+---
+
+## 🚀 Core Capabilities
+
+| Capability | Architecture & Description |
 |---|---|
-| 🧑‍🎤 Holographic Avatar | An animated human head in the HUD — real facial geometry, lit and drawn in software, no GPU or extra packages |
-| 👄 Real Lip-Sync | ~50 mouth shapes a second from the audio's formants **and** the transcript — closures, spreads and rounds, not a volume meter |
-| 🌍 Language-Free Mouth | Articulation is derived by Unicode reduction, so Latin, Cyrillic and Greek scripts all work from one rule set — and scripts that hide pronunciation fall back cleanly |
-| 🙂 Facial Acting | Brows track the phrase, gaze saccades between fixations, natural blinking, a small nod on stressed syllables |
-| 😐 Face as Status | Looks away while thinking, meets your eyes while listening, lids fall while asleep, glances down at new content |
-| 🎚️ Push-to-Talk | Hold **Ctrl+Space** and the mic opens — closed the rest of the time. Truly global on Windows, window-scoped elsewhere |
-| 🔇 Self-Echo Guard | Never answers its own last sentence: the tail of its own voice is recognised and dropped without muting you |
-| 🪪 Runtime Self-Knowledge | Name, OS, abilities **and limits** are generated from the live system each session — rename it or add a plugin and it knows |
-| 🎙️ Wake Word | Local **"Hey Jarvis"** detection — sleeps until called, auto-sleeps after 2 min of silence, and never streams audio while asleep |
-| ⚡ Instant Acknowledgment | Speaks a short, context-aware reply in **your language** the instant a longer task starts — no more silent waiting |
-| 🚀 Faster Live Engine | Runs on **Gemini 3.1 Flash Live** — roughly 2× faster time-to-first-word than the previous model |
-| 🧩 Self-Describing Skills | Actions and plugins share one shape (`TOOL` / `PLUGIN` dict + `run()`), auto-discovered at launch — adding a skill is a single file |
-| 🧠 Recallable Memory | No size limit and nothing silently forgotten — the prompt carries what fits, the rest is looked up on demand from a local search |
-| 👁️ Memory Panel | See every fact JARVIS has stored about you, when it learned it, and delete any of it in one click |
-| ↩️ Undo | Take back what the assistant did — files it moved, renamed, created or wrote, and settings it changed |
-| ⚠️ Real Confirmation | Shutdown, restart and WiFi wait for a button **you** press — the model cannot confirm its own irreversible actions |
-| 🎧 Audio Device Picker | Choose the microphone and speakers by name, filtered to the short list your OS shows — and measured, so every entry actually works |
-| 🔗 Session Continuity | A dropped connection, a voice change or a device change no longer wipes the conversation |
-| 🧩 Plugin System | Drop a single `.py` file into `plugins/` — JARVIS learns a new skill on next launch |
-| 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
-| 🎨 Live Theming | Recolour the entire HUD from a hue wheel or hex — the avatar retints with it |
-| 〰️ Reactive HUD | Waveform pulses to real audio — your mic while listening, JARVIS while speaking |
-| 🎙️ Voice Picker | Choose from 5 native Gemini voices and switch live from the UI — no restart |
-| ♾️ Unlimited Sessions | Sliding-window context compression — one conversation can last for hours |
-| 🖥️ System Control | Launch apps, adjust volume/brightness, WiFi, shortcuts, power — all by voice |
-| 🧩 Autonomous Tasks | High-level planning for complex multi-step goals via agent mode |
-| 👁️ Visual Awareness | Screen capture and webcam vision piped into your main Gemini session, labelled by source |
-| 🧠 Persistent Memory | Deeply remembers projects, preferences, and personal context across sessions |
-| ⌨️ Hybrid Input | Seamlessly switch between keyboard typing and voice commands |
-| 🌅 Morning Briefing | On first boot: greets you, reads the time, recaps yesterday, and fetches live news |
-| 🔔 Proactive 2.0 | Time-aware, context-aware check-ins — knows the time of day, your projects, and what you've been discussing |
-| 🗓️ Session Memory | Summarises each conversation and mentions it naturally next morning — consumed after use, never repeats |
-| 👁️‍🗨️ Background Monitoring | User-configured topic watching — checks for new headlines once a day and alerts naturally |
-| 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts |
-| 🌤️ Weather Report | Live weather data for your city, personalized from memory |
-| 🗺️ Dynamic Content Panel | Scrollable display layer beneath the HUD that renders web results, news, and search data |
-| 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — Gemini Grounded first, DDG fallback |
-| ⏰ Smart Reminders | OS-native scheduled notifications (Windows Task Scheduler / macOS LaunchAgent / Linux systemd) |
-| ✈️ Flight Finder | Live flight price and availability lookup |
-| 🎮 Game Updater | Checks and triggers game updates on Steam and Epic Games on demand |
-| 📂 File Processor | Read, summarize, and answer questions about local files |
-| 💻 Code Helper | Inline code review, debugging, and generation |
-| 🌐 Browser Control | Open URLs, navigate tabs, and interact with the browser by voice |
-| 📨 Send Message | Compose and send messages through WhatsApp, Telegram, and more |
-| 🎬 YouTube Control | Search, play, and control YouTube playback by voice |
-| 🖱️ Desktop Control | Taskbar, window management, and desktop-level operations |
-| 🧑‍💻 Silent Language Memory | Detects spoken language on first use — all future sessions adapt automatically |
-| 📱 Remote Dashboard | Control the assistant from your phone via QR code pairing |
-| ⚡ Auto-Start on Boot | Registers with the OS startup system (registry / LaunchAgent / .desktop) |
-| 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
-| 🪪 Assistant Customization | Change the assistant name, your name, voice, and colour from the UI — takes effect immediately |
+| 🎙️ **Real-Time Voice Intelligence** | Bidirectional low-latency voice streaming via **Gemini 3.1 Flash Live**. Talk naturally in any language with sub-second time-to-first-word. |
+| 🧑‍🎤 **Holographic Software Avatar** | 3D human head rendered via pure software math (`QPainter`) with zero GPU driver dependencies. Breathes, blinks, looks away while thinking, and glances at new content. |
+| 👄 **Formant & Viseme Lip-Sync** | ~50 mouth shapes/sec derived from real-time FFT audio formants (F1 openness, F2 spread/round) combined with Unicode articulatory decomposition across 20+ languages. |
+| 👁️ **Multimodal Vision Engine** | Single-frame on-demand screen and webcam capture (`screen_processor.py`). Captures are labelled by source and injected directly into the Gemini exchange. |
+| 🖥️ **Full Computer Control** | Direct desktop automation (`computer_control.py`): keystrokes, hotkeys, mouse clicks/drags, window focus, clipboard read/write, AI element location (`screen_find`). |
+| 🎚️ **Global Push-to-Talk** | Hold `Ctrl+Space` to talk. Mic remains completely closed otherwise. Truly global on Windows (30 Hz raw virtual key polling), window-scoped on macOS/Linux. |
+| 🔇 **Acoustic Self-Echo Guard** | Calibrated against measured device output latency (`_out_latency + _TAIL_MARGIN`). Drops ALFRED's own voice tail so he never accidentally talks to himself. |
+| 🧠 **Unlimited Memory Engine** | Tiered memory structure in `memory/long_term.json`. Core identity facts stay in context; extended history is recalled on demand via sub-millisecond local search. |
+| ↩️ **Universal Action Undo** | Reverse file moves, renames, writes, creations, and OS settings changes simply by saying *"undo"* in any language. |
+| ⚠️ **Human Confirmation Gate** | Irreversible commands (shutdown, restart, WiFi toggle) require an explicit physical UI click — preventing model hallucination disasters. |
+| 📱 **Encrypted Web Remote** | Run `python main.py`, scan the on-screen QR code on your phone, and control ALFRED over local WiFi with AES-256 session encryption. |
+| 🧩 **Self-Describing Plugin System** | Drop any single `.py` file with a `PLUGIN` dictionary into `plugins/` — ALFRED auto-discovers and registers the capability at startup. |
+| 🔍 **Multi-Tier Web Search** | Deep search, news monitoring, and price comparison using Gemini Grounding with automated DuckDuckGo fallbacks. |
+| ⏰ **Native OS Task Scheduler** | Schedules reminders via Windows Task Scheduler (`schtasks`), macOS `launchd`, or Linux `systemd`/`at`. |
 
 ---
 
-## 🆕 What's New in Mark LIV
+## 🗺️ System Architecture
 
-No hardcoded language, no GPU requirement, no new dependencies — identical on Windows, macOS and Linux.
+ALFRED's architecture is organized into clean, modular layers discovered dynamically at runtime:
 
-### The face
-
-#### 🧑‍🎤 A real head, rendered in software
-The centre of the HUD is now an animated human head. Its face is **real measured human geometry** — MediaPipe's canonical face model, with actual eyelids, nostrils, lips and cheekbones. The skull, neck, jaw rig and lip rig are generated around it at startup, and the whole thing is lit and drawn with **QPainter**, which means:
-
-* **no new dependencies** — it runs on the PyQt6 and numpy the app already needed;
-* **no OpenGL, no shaders, no GPU driver** to disagree with you — a VM, a remote desktop session and an old integrated laptop all render the same picture;
-* **one 25 KB asset**, and everything else is a formula.
-
-It breathes, sways, blinks, and retints instantly when you change the HUD colour.
-
-#### 👄 Lip-sync you can actually read
-The old mouth opened to the volume meter, five times a second. The new one produces **~50 mouth shapes per second** from two sources at once:
-
-* **the audio** — a formant read of each 20 ms slice gives openness (how far the jaw drops) and width (spread for *i* and *e*, rounded for *u* and *o*). This is physics, so it is language-independent by construction.
-* **the transcript** — because no spectrum can tell you the lips are *closed*. /m/, /b/ and /p/ look identical to a filter bank and completely different on a face. The words supply the shape; the audio supplies the timing and the force.
-
-#### 🌍 One rule set, every alphabet
-There is no per-language table. Every character is reduced to a bare Latin letter — Unicode decomposition strips accents (é, ü, ş, ğ, ế, ñ, å…), and Cyrillic and Greek transliterate — then articulation is looked up on the sound.
-
-**Turkish, English, German, French, Spanish, Polish, Vietnamese, Czech, Russian, Ukrainian and Greek all work from the same twenty-odd rules.** Scripts whose spelling doesn't reveal pronunciation (Arabic, Chinese, Japanese, Hindi, Korean, Hebrew, Thai) are detected automatically and the mouth runs on the audio-only shape — less detail, never wrong. Adding a language costs nothing, because there is nothing to add.
-
-#### 🙂 It acts while it talks
-Brows ride the *phrase*, not the syllable, with a slow asymmetry between them. The eyes make real saccades between fixation points, more often while speaking. It blinks. Loud syllables tip the head. Everything relaxes to neutral in silence — and the mouth **only** moves for the assistant's own voice, never for yours.
-
-#### ◉ Two HUDs, one toggle
-Not everyone wants a face looking back at them. ⚙ → **HUD** swaps the centrepiece between the animated head and a **reactor core** — a gauge ring, three arcs that turn at a rate the state sets, a spectrum ring driven by the real audio level, and a core that brightens with the voice. Both render in the same software painter and cost the same; the choice is taste, and it survives a restart.
-
-Nothing on the core moves for decoration. The rings speed up when JARVIS is thinking, the spikes are the actual waveform, and the colour is the state — the same language the face speaks, without the face.
-
-#### 🗣️ It answers before it works
-Some replies used to open with three or four seconds of silence: not because a tool was slow, but because JARVIS was still *writing the tool call* — a set of quiz questions, the findings from a contract. The tool was instant; the composing was not, and from the user's side those are the same thing.
-
-The rule is now about the silence rather than the tool: if a gap would form, say one sentence naming what you are starting, then do it. It applies to anything that takes a moment to run **or** a moment to write, without a list of which tools those are.
-
-#### 😐 The face is a status light
-You read a gaze faster than you read a word, so the head tells you what the assistant is doing before it says anything. It **looks away and holds it while thinking** — brows drawn down, blinking suppressed, the way concentration actually looks — **meets your eyes while listening**, and **lets its lids fall while asleep**. When something appears in the content panel below, it **glances down at it**: a wordless "that landed".
-
-### Talking to it
-
-#### 🎚️ Push-to-talk
-Wake word is hands-free, but in a meeting or a noisy room a key is faster and never mishears. Turn on **⚙ → PUSH-TO-TALK** and the microphone stays **closed** until you hold **Ctrl+Space** — nothing leaves the machine while you are not holding it. Holding the chord also wakes the assistant, so it doubles as a silent alternative to saying the wake word.
-
-On **Windows** the chord is genuinely global: it works while any other application has focus, implemented by polling two virtual-key codes thirty times a second, with **no new dependency** and no message loop. On **macOS and Linux** there is no dependency-free way to read global key state, so the chord is bound inside the window instead — and the app **says so in the log** rather than pretending otherwise.
-
-#### 🔇 It no longer talks itself into replying
-Writing audio to a device returns when the buffer *accepts* the sound, not when the speaker has finished with it — so for a moment after a reply "ends", it is still in the room. Streaming the microphone during that gap is how an assistant hears its own last sentence, decides it was addressed, and answers itself.
-
-Mark LIV holds a guard open across that gap, sized from the **device's own reported latency** rather than a guessed constant, so a machine with a large audio buffer gets a longer guard and one with a small buffer is not penalised. The microphone is **not muted** during it: both streams are reduced to band energies and as much of what was just played is subtracted from the microphone as fits, so only your assistant's own voice is dropped — replying the instant it stops still works.
-
-> Interrupting it mid-sentence by voice is built on the same machinery and is deliberately **switched off** in this release. It depends too much on the listener's room to ship without testing on real hardware.
-
-### How it understands itself
-
-#### 🪪 It knows what it is, and what it isn't
-Who it is, what machine it runs on, what it can do and **what it cannot do** are assembled from the live system at session start — the configured name, the real OS, the tools actually discovered. Install a plugin and it knows it gained an ability; remove one and it stops claiming it.
-
-The **limits** half is the important one: it knows its sight is a single frame on demand rather than a live feed, that it acts on this machine only, and that anything outside its tool list should be stated plainly instead of improvised.
-
-All prompt wording lives in `core/prompt.txt` with `{tokens}` the app fills in — so you can rewrite the personality without touching Python, and a stray brace in your own wording can't break startup.
-
-### 🩹 Fixes
-* Answers were sometimes **logged and spoken twice** — the Live API re-sends the tail of a transcript across the several turn-completes a tool call produces. Now de-duplicated at both the chunk and the flush level.
-* Asking JARVIS to look at the screen produced **two different answers** — the flow made it speak once *before* the image arrived, so it improvised, and again after. The frame is now attached to the same exchange as its tool result: one turn, one answer, one fewer round trip.
-* Screen captures were **unlabelled**, so a screenshot of this app — which has a face in the middle of it — could be read as a photo of the user. Images now carry their source.
-* On a non-UTF-8 console (cp1254, cp1251, cp932…) the emoji in the status lines **crashed the session on startup**. Streams are reconfigured at launch, so it starts the same way in every locale.
-* The HUD kept rendering the avatar **while the window was hidden or minimised**. It now stops, and resumes mid-motion rather than snapping.
-* Activity-log lines were fixed amber and ignored the theme; they now follow the accent colour.
-* Dependencies had no upper bounds, so the next major release of any of them would break every fresh clone. The load-bearing ones are now capped.
-* The mouth **ran ahead of the words, then behind them**. Three separate faults compounded: each 200 ms of audio only produced 160 ms of mouth shapes, every new batch overwrote the previous one instead of continuing it, and the schedule was anchored to the moment audio was *handed to the device* rather than the moment it becomes *audible*. The mouth now follows one continuous playback clock — measured at **15 ms** of timing error whether the sound card buffers 100 ms or 500 ms.
-* The jaw was driven by the **waveform meter**, which deliberately holds peaks so the bars don't flicker. That hold spanned exactly the consonants the mouth needed to close on. It now reads the audio's own 20 ms levels, so the gaps between words are real gaps.
-* Mouth timing was measured in **frames rather than seconds**, so the same constants meant three different mouths at 60, 30 and 20 fps, and a closure shorter than one frame could vanish entirely. Timing is now in seconds and the mouth is stepped once per 20 ms of audio, not once per repaint.
-* The **brows barely moved** — 6 px of travel on a 250 px head, because the rig weights halved an already small constant. Derived from the anatomy instead: 19 px.
-* The activity log opened with **a dozen lines of plumbing** — one per plugin loaded, plus wake-word and briefing status. The console still carries the full boot transcript; the log now shows your conversation, state changes and anything you have to act on, and nothing else.
-
-> Built on the Mark LI–LIII foundation: the **🧩 Plugin System**, **♾️ Unlimited Sessions**, **🎨 Live Theming**, **🎙️ Wake Word** and **🧩 Self-Describing Skills** are all still here.
-
----
-
-## 🔄 The Foundation Update — in every Mark from LII
-
-These four landed across **Mark LII, LIII, LIV and LV at the same time**, after each of those releases had already shipped. They are not what any one of those versions originally introduced; they are the floor all of them now stand on, so moving up a Mark never costs you something the one below it had.
-
-No new dependencies. No bundled asset files. No hardcoded language, and nothing that assumes one operating system.
-
-### 🧠 A memory that actually remembers
-
-The store was capped at **2,200 characters — the whole memory, not per entry** — because all of it was pasted into the system prompt on every connect, so growing the memory grew every request. When it filled, the oldest entries were deleted and one line was printed to a console nobody reads. An assistant advertised as remembering "projects, preferences and personal context" was in practice a two-page notepad that quietly forgot your sister's name after a few weeks.
-
-Storage and prompt budget are now separate problems:
-
-* **Nothing is deleted.** The cap is a runaway guard normal use never approaches, and if it is ever hit it says so in the activity log instead of on stdout.
-* **The prompt carries a core, not a dump.** Identity in full, then the most recently updated facts, budgeted — measured at **971 characters on a memory holding 62 stored facts.** That is *smaller* than the old whole-store cap, so sessions now connect with fewer tokens than before.
-* **The rest is fetched on demand.** A `recall_memory` tool searches the full store locally — no network, no second model, well under a millisecond.
-
-The part that is easy to get wrong: **a model cannot look something up if it doesn't know the thing exists.** So the prompt also carries an **index of the keys** it had no room for. Without it, "who is Ayşe?" gets "I don't know" while `ayse_sister` sits on disk unread. That index interleaves categories rather than sorting by recency — sorted like the core, a memory with forty preferences pushed the one entry the index existed for off the end.
-
-⚙ → **🧠 MEMORY** shows every stored fact, when it was learned, and a ✕ to forget it. Everything stays in `memory/long_term.json` on your machine.
-
-### ↩️ Undo — it can take back what it did
-
-JARVIS moves files, renames them, writes to them and changes your settings. None of that had a way back; if it misheard you, the only remedy was to fix it by hand.
-
-Say **"undo"** — in any language — and it reverses its own last action:
-
-| | |
-|---|---|
-| **Files** | move · rename · create · copy · write · delete · organize desktop |
-| **Settings** | volume · brightness · dark mode |
-
-Three things it deliberately does *not* do:
-
-* **It does not guess.** Settings undo reads the current value *before* changing it. Where a platform won't report that value, nothing is registered — an undo that restores a guess is worse than no undo.
-* **It does not hoard.** Undoing a write means keeping the old contents in memory, so files over 1 MB are excluded and it says so rather than holding a 200 MB log for the session.
-* **It does not delete your files to undo a copy.** The reverse of a copy is removing the copy; the reverse of "create a folder" is removing it *only while it's still empty*.
-
-`organize_desktop` gets special treatment — one command that moves dozens of files, which made it the least reversible thing the assistant could do. It journals every move and puts all of them back in one go, cleaning up the folders it created if they're still empty.
-
-**Undo costs nothing at runtime.** It appends a closure to a list; nothing in it runs unless you ask.
-
-### ⚠️ A confirmation the model can't forge
-
-The old gate read like this:
-
-```python
-if action in _DANGEROUS_ACTIONS:            # {"restart", "shutdown"}
-    confirmed = str(params.get("confirmed", "")).lower()
 ```
-
-`confirmed` is a **tool parameter, which means the model fills it in.** Nothing stopped it sending `confirmed=yes` on the first call and nothing checked that a human was ever involved. It was a convention, not a gate. And its coverage was two actions — so `toggle_wifi`, which cuts the assistant's own connection to the Live API and therefore *cannot be asked to undo itself*, went through with no gate at all.
-
-The token is now issued by the interface. Shutdown, restart and WiFi put a banner on the HUD and **return immediately**; the action runs only if you press CONFIRM. Nothing blocks — JARVIS keeps talking while the banner is up — so this is **cheaper than the old gate**, which burned two tool round trips on every power command.
-
-> The split between the two mechanisms is about reversibility, not about how alarming a word sounds. Anything undoable is done at once; only the genuinely irreversible asks. An assistant that checks with you before turning the volume down is one you stop talking to.
-
-### 🎧 It finally asks which microphone
-
-Both audio streams opened with no device argument at all, so they always took whatever the OS called "default" — and on Windows that *moves on its own* the moment you plug a headset in. "JARVIS can't hear me" almost always meant "JARVIS is listening to the webcam".
-
-⚙ → **🎧 AUDIO DEVICES** lets you pick the microphone and the speakers by name. Two things matter more than the dropdown:
-
-**The list is short.** `query_devices()` returns one entry per *device × host API*, not per device — measured on an ordinary Windows machine, **41 entries for what the sound settings show as 4 microphones and 4 speakers.** The same microphone appears four times, under MME, DirectSound, WASAPI and WDM-KS, with nothing to say which is which. That is not a choice, it's a quiz. The picker takes one host API per direction, drops the "Sound Mapper" and "Primary Sound Driver" pseudo-devices that just mean "default", and deduplicates. **41 → 8.**
-
-**Every entry has been measured, not assumed.** The obvious approach is to pick the host API with the nicest names — WASAPI on Windows, which in shared mode **doesn't resample**, so with 16 kHz in and 24 kHz out against 48 kHz hardware every open failed. Adding a rate check and moving to DirectSound passes that test on both sides, and PortAudio's DirectSound **output is a silent sink**: the stream opens, every write returns success in ~0 ms, and not one sample reaches the speakers.
-
-| | write(2.0 s) took | |
-|---|---|---|
-| MME | **2.02 s** | consumed in real time |
-| DirectSound | **0.00 s** | swallowed instantly |
-
-No capability flag reports that. So the app measures it — once per host API per direction, on a background thread at startup, using silence. Two consequences worth stating plainly:
-
-* **Each direction picks its own host API.** On Windows this lands on DirectSound for the microphone and MME for the speakers — a split no amount of reasoning would have produced.
-* **The probe runs in the mode the app actually ships.** DirectSound input passes a callback stream and fails a blocking read; probing the wrong mode rejected a microphone that works perfectly.
-
-Your choice is stored **by name, not by index** — indices shift whenever something is plugged in. If the saved device is gone, it falls back to the system default and says so in the log rather than failing to start.
-
-### 🔗 It stops forgetting the conversation when the connection drops
-
-`session_resumption` was switched on in the config and the handle the server sent back was **never read** — so every reconnect started an empty session. A dropped packet, or simply changing the voice, wiped the conversation. "Unlimited sessions" leaked through exactly this hole.
-
-The handle is captured and replayed now. A network blip, or switching your microphone, keeps the conversation intact.
-
-It is held in memory only, deliberately: writing it to disk would make a fresh launch continue yesterday's chat, which sounds appealing but breaks the session-summary flow — a conversation that never ends never produces a summary, and the "yesterday we talked about…" line in the morning briefing silently disappears. Changing the **voice** also starts clean on purpose, since resuming restores the server's session state and would likely bring the old voice back with it.
-
-### 🩹 Fixes that came with it
-
-* **The assistant could die on a log line.** Status lines carry emoji and arrows (`📤 file_controller → Moved: a.txt → Documents/`). On a non-UTF-8 console — cp1254 on a Turkish Windows, cp1251 on a Russian one, cp932 on a Japanese one — printing one raises `UnicodeEncodeError`, and because that print sits *after* the tool's own `try/except`, it escaped into the receive loop and took the session down.
-* **Every computer command paid for two model round trips.** `computer_settings` made an *entire second Gemini call, inside the tool*, purely to translate the request into one of its own action names — because the declaration only said "The action to perform", so the model rarely filled it in. When that second call failed, the fallback was `description.lower().replace(" ", "_")`, which turns the Turkish for "turn it down" into `sesi_kis` and straight into "Unknown action". The declaration now names all 56 actions and the rest is spelling tolerance handled locally by `difflib` in microseconds. When nothing matches it suggests real action names instead of dead-ending.
-* An unresolvable saved audio device, or one the driver refuses to open, falls back to the system default and says so — on both the microphone and the speakers.
-* A rejected session-resumption handle is dropped after one attempt, so an expired handle can never be replayed on every retry and prevent the reconnect it exists to protect.
-
-
-
----
-
-## 🗺️ Mark Roadmap
-
-| Mark | Focus |
-|---|---|
-| **XLIX** | Auto-start · clipboard intelligence · assistant customization |
-| **L** | Session memory · background monitoring · proactive 2.0 · instant vision |
-| **LI** | Plugin system · affective dialog · proactive audio · unlimited sessions |
-| **LII** | Voice picker · live theming · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
-| **LIII** | Wake word · Gemini 3.1 Flash Live · instant acknowledgment · self-describing action/plugin architecture |
-| **LIV** | Holographic avatar · viseme lip-sync · facial acting · face-as-status · push-to-talk · self-echo guard · runtime self-knowledge & limits |
-| *shared* | The last five above also shipped to LIII, LIV and LV at the same time — moving up a Mark never loses them |
-| **LV+** | Interrupt by voice · conversation history · plugin files: email · quiz mode · calendar · home assistant · 3D-printer |
+Mark-LIV/
+├── main.py                     # Main execution loop, Gemini Live WebSocket, audio streams, tool router
+├── ui.py                       # PyQt6 HUD interface, holographic avatar, audio visualizer, drawer settings
+├── setup.py                    # OS-aware package and dependency installer
+├── core/
+│   ├── prompt.txt              # Master persona directives, execution rules & Heavenly Restriction
+│   ├── action_loader.py        # Dynamic action discovery, parameter validation & Heavenly Restriction guard
+│   ├── plugin_loader.py        # Drop-in plugin discovery, sandboxing & isolation
+│   ├── avatar.py               # Software QPainter head renderer, lighting & expression rig
+│   ├── avatar_mesh.py          # MediaPipe 3D canonical facial geometry builder
+│   ├── viseme.py               # Unicode articulatory transcription to mouth shapes
+│   ├── echo.py                 # Device-calibrated acoustic echo cancellation guard
+│   ├── hotkey.py               # Global / local Push-to-Talk chord interceptor
+│   ├── undo.py                 # Stack-based reversible action journal
+│   ├── confirm.py              # Cryptographic UI confirmation gate for destructive actions
+│   └── audio_devices.py        # Measured host API audio device enumeration (MME / DirectSound / WASAPI)
+├── actions/                    # Bundled operational tools (TOOL dictionary schema)
+│   ├── computer_control.py     # OS automation, keyboard/mouse input, dual screenshots
+│   ├── screen_processor.py     # Multi-monitor screen & camera capture engine
+│   ├── file_controller.py      # File system operations with path restriction checks
+│   ├── file_processor.py       # PDF/DOCX/TXT analysis, parsing, and summarization
+│   ├── open_app.py             # OS-specific application and executable launcher
+│   ├── computer_settings.py    # Volume, brightness, WiFi, power state management
+│   ├── web_search.py           # Multi-mode parallel search (news, research, comparison)
+│   ├── intel_notes.py          # Tactical mission note logger and scratchpad
+│   ├── proactive.py            # Context-aware proactive check-in engine
+│   ├── background_monitor.py   # Daily background topic watcher and headline alerts
+│   ├── reminder.py             # OS-native task scheduler notifications
+│   ├── system_monitor.py       # Live CPU, GPU, RAM, temperature telemetry
+│   ├── dev_agent.py            # Autonomous code developer agent
+│   ├── code_helper.py          # Code analysis and generation
+│   ├── send_message.py         # WhatsApp and Telegram message dispatcher
+│   ├── youtube_video.py        # YouTube search and playback control
+│   ├── game_updater.py         # Steam and Epic Games library updater
+│   └── weather_report.py       # Localized live meteorological reports
+├── dashboard/                  # Quantum Mobile Remote Server
+│   ├── server.py               # FastAPI + Uvicorn + WebSocket encrypted daemon
+│   ├── static/
+│   │   └── app.html            # iPhone 16 responsive tactical web app & telemetry console
+│   └── uploads/                # Transferred files & captured screenshots
+├── memory/
+│   ├── memory_manager.py       # Long-term memory JSON persistence and indexing
+│   ├── config_manager.py       # Settings, voice, theme, and API key management
+│   └── long_term.json          # Local encrypted fact database
+├── config/
+│   ├── api_keys.json           # User credentials, identity settings & voice preferences
+│   └── certs/                  # Local self-signed SSL/TLS certificates for HTTPS/WSS
+└── graphify-out/               # GraphRAG knowledge graph, community clusters, and analysis
+```
 
 ---
 
 ## ⚡ Quick Start
 
-```bash
-git clone https://github.com/FatihMakes/Mark-LIV.git
+### 1. Prerequisites
+* **Operating System**: Windows 10/11, macOS, or Linux.
+* **Python**: `3.11`, `3.12`, or `3.13`.
+* **Hardware**: Working microphone and speakers. *(No dedicated GPU required — avatar runs on software rendering).*
+* **API Key**: Free Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
+
+### 2. Setup & Installation
+
+```powershell
+# Clone the repository
+git clone https://github.com/AdityaManojA/Mark-LIV.git
 cd Mark-LIV
-python setup.py        # installs deps for YOUR OS + the browser automation engine
+
+# Run the OS-tailored setup script
+python setup.py
+
+# Launch ALFRED
 python main.py
 ```
 
-`setup.py` only ever installs what your operating system needs — the Windows-only libraries are skipped automatically on macOS and Linux, and vice-versa. It also checks your Python version up front, so a wrong interpreter fails with a sentence instead of a wall of pip output. Prefer to do it by hand? `pip install -r requirements.txt` works too.
-
-> ⚠️ **Installation Note:** If you hit a `ModuleNotFoundError` for an OS-specific package, install it with `pip install <module_name>`. The optional **wake word** engine is *not* installed here — grab it in one click from **⚙ → WAKE WORD** inside the app.
+*On the very first launch, the setup dialog will prompt you to enter your Gemini API Key. Your settings and credentials are saved locally in `config/api_keys.json`.*
 
 ---
 
-## 📋 Requirements
+## 📱 Mobile Pairing (iPhone / Android)
 
-| Requirement | Details |
-| --- | --- |
-| **OS** | Windows 10/11, macOS, or Linux |
-| **Python** | 3.11, 3.12 or 3.13 |
-| **Microphone** | Required for voice interaction (and for the "Hey Jarvis" wake word) |
-| **Speakers** | Required for voice replies |
-| **API Key** | Free Gemini API key (entered on first launch → `config/api_keys.json`) |
-| **GPU** | **Not required.** The avatar is rendered in software |
-| **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, a few MB, fully local) |
+1. Launch `python main.py`.
+2. Click the **Remote / QR Code** button on the bottom toolbar.
+3. Open your phone's camera and scan the QR code (or browse to `https://<YOUR_LOCAL_IP>:8765`).
+4. Accept the local self-signed SSL certificate.
+5. You now have full mobile access:
+   * **Live Red-Tag Telemetry**: Watch ALFRED think, call tools, and respond in real time.
+   * **Push-to-Talk Mic**: Hold the mobile mic button to speak into ALFRED from anywhere on your WiFi.
+   * **Instant Screenshots**: Capture your desktop screen by voice; it lands directly on your phone feed with an instant preview and save link.
+   * **Encrypted File Beam**: Upload files directly from your phone to your PC.
 
 ---
 
-## 🗂️ Project Structure
+## 🧠 Memory & Customization
 
-```
-Mark LIV/
-├── main.py                   # Core loop — Gemini Live session, audio I/O, viseme extraction, tool dispatch
-├── ui.py                     # PyQt6 HUD — avatar canvas, waveform, log panel, settings drawer, camera feed
-├── setup.py                  # OS-aware installer (skips wrong-OS dependencies, checks your Python)
-├── .gitignore                # Keeps your API key, TLS key and memories out of the repository
-├── plugins/
-│   ├── quiz.py               # Interactive quiz — JARVIS writes the questions, you answer on screen
-│   ├── document_review.py    # Contracts and policies in plain language, ordered by what matters
-│   ├── _google_core.py       # Shared OAuth for the Gmail/Calendar plugins (not a plugin itself)
-│   ├── _printer_core.py      # Shared printer connectivity (not a plugin itself)
-│   ├── _template.py          # Copy this to write a new plugin — one file, drop in, done
-│   └── ...                   # Drop-in skills (each self-describes via a PLUGIN dict + run())
-├── actions/                  # Bundled skills — each self-describes via a TOOL dict + handler
-│   ├── web_search.py         # Gemini + DDG parallel search (news, research, price, compare)
-│   ├── screen_processor.py   # Screen & webcam capture for vision
-│   ├── background_monitor.py # User-configured topic watching — daily DDG check
-│   ├── proactive.py          # Proactive 2.0 — time/context/rotation-aware check-ins
-│   ├── reminder.py           # OS-native scheduled notifications
-│   ├── system_monitor.py     # CPU / RAM / GPU / temperature telemetry
-│   ├── computer_settings.py  # Volume, brightness, WiFi, power (per-OS)
-│   ├── computer_control.py   # Keyboard shortcuts, mouse, window management
-│   ├── open_app.py           # Application launcher (per-OS name map)
-│   ├── browser_control.py    # Web browser control
-│   ├── file_controller.py    # File system operations
-│   ├── file_processor.py     # Document reading and summarization
-│   ├── send_message.py       # Messaging integration
-│   ├── weather_report.py     # Live weather data
-│   ├── flight_finder.py      # Flight search
-│   ├── youtube_video.py      # YouTube playback control
-│   ├── game_updater.py       # Game update management (Steam / Epic)
-│   ├── code_helper.py        # Code review and generation
-│   ├── dev_agent.py          # Developer task agent
-│   └── desktop.py            # Desktop and taskbar control
-├── memory/
-│   ├── memory_manager.py     # Load/save long_term.json — sessions, monitors, identity
-│   ├── config_manager.py     # api_keys.json access — key, OS, name, voice, colour, toggles
-│   └── long_term.json        # Persistent store — created on first run
-├── core/
-│   ├── prompt.txt            # All prompt wording — {tokens} are filled from the live system at startup
-│   ├── avatar.py             # Avatar renderer — lighting, pose, expression, mouth (QPainter)
-│   ├── avatar_mesh.py        # Head geometry — loads the face, generates skull/neck/rigs
-│   ├── face_model.obj        # The face itself (MediaPipe canonical model, Apache-2.0, 25 KB)
-│   ├── viseme.py             # Transcript → mouth shapes, fused with the audio's timing
-│   ├── echo.py               # Tells your voice from the assistant's own echo; self-calibrating
-│   ├── hotkey.py             # Push-to-talk chord — global on Windows, windowed fallback elsewhere
-│   ├── undo.py               # One shared undo stack — actions register how to reverse themselves
-│   ├── confirm.py            # Irreversible-action gate — the token is issued by the UI, not the model
-│   ├── audio_devices.py      # Microphone / speaker list — filtered, measured, resolved by name
-│   ├── plugin_loader.py      # Plugin engine — discovery, validation, crash isolation
-│   ├── action_loader.py      # Bundled-action engine — the built-in twin of plugin_loader
-│   └── wake_word.py          # Local "Hey Jarvis" detector — own thread, offline, opt-in
-└── config/
-    ├── api_keys.json         # API key, name, voice, colour, toggles — created on first launch (git-ignored)
-    └── certs/                # Self-signed TLS pair for the phone dashboard — generated locally (git-ignored)
+### Configuring Your Persona (`config/api_keys.json`)
+```json
+{
+    "assistant_name": "ALFRED",
+    "user_name": "Master Wayne",
+    "ui_color": "#e5a93b",
+    "voice_name": "Charon",
+    "wake_word_enabled": false,
+    "push_to_talk_enabled": true
+}
 ```
 
----
-
-## 🙏 Third-Party Assets
-
-| Asset | Source | Licence |
-| --- | --- | --- |
-| `core/face_model.obj` | [MediaPipe](https://github.com/google-ai-edge/mediapipe) canonical face model — 468 vertices of measured human face geometry | Apache License 2.0 |
+* **Voice Selection**: Choose between `Charon`, `Puck`, `Aoede`, `Fenrir`, or `Kore` in the UI settings drawer without restarting.
+* **Hue Wheel & Colors**: Customize the HUD theme live from the palette drawer; the software avatar dynamically updates its ambient lighting to match.
+* **Memory Management**: Open **⚙ → 🧠 MEMORY** to inspect everything ALFRED knows about you, or delete specific items in one click.
 
 ---
 
-## 🔒 Your Data
+## 📊 Knowledge Graph (`graphify`)
 
-Everything stays on your machine. There is no MARK server, no telemetry and no account.
-
-| What | Where | Notes |
-|---|---|---|
-| Gemini API key, plugin credentials | `config/api_keys.json` | **Plaintext.** Anyone with your user account can read it. Treat it like a password file. |
-| Dashboard TLS certificate + private key | `config/certs/` | Generated locally, self-signed, never leaves the machine. |
-| What the assistant remembers about you | `memory/long_term.json` | Delete the file to make it forget everything. |
-
-All three are listed in `.gitignore`, so a fork or a pull request cannot leak them by accident. **If you have already committed `config/api_keys.json` anywhere public, revoke that key** at [aistudio.google.com](https://aistudio.google.com/app/apikey) and generate a new one — removing the file in a later commit does not remove it from the history.
-
-Your voice is streamed to Google's Gemini Live API while a session is open; that is the one thing that leaves your computer, and it stops when you mute or close the app.
+This codebase is indexed with a full **GraphRAG Knowledge Graph** located in `graphify-out/`:
+* **1,722 nodes** & **3,371 relationships** mapped across 103 semantic functional communities.
+* Interactive navigable graph visualization: [`graphify-out/graph.html`](file:///d:/Projects/Personal-Assistant/Mark-LIV/graphify-out/graph.html).
+* Exhaustive architectural breakdown: [`graphify-out/GRAPH_REPORT.md`](file:///d:/Projects/Personal-Assistant/Mark-LIV/graphify-out/GRAPH_REPORT.md).
 
 ---
 
-## ⚠️ License
+## 🔒 Privacy & Security Notice
 
-Personal and non-commercial use only.
-Licensed under **[Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**.
+* **100% Local Processing for System Operations**: Computer control, file access, and process management run locally on your host CPU.
+* **No Telemetry / No Tracking**: No proprietary servers, telemetry trackers, or cloud subscriptions are involved.
+* **Data Confinement**: Audio streams leave your machine solely to Google's Gemini Live API endpoint while a turn is active.
+* **Credentials Protected**: All keys, certs, and memory files are strictly excluded via `.gitignore`.
 
 ---
 
-## 👤 Connect with the Creator
+## 👤 Author & Credits
 
-Engineered by a developer building a real-world JARVIS-style assistant.
-⭐ **Star the repository to support the journey to Mark 100.**
+* **Lead Architect & Creator:** **ADITYA MANOJ**
+* **Project:** Mark-LIV (Wayne Protocol Edition)
+* **License:** [Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/)
 
-| Platform | Link |
-| --- | --- |
-| YouTube | [@FatihMakes](https://www.youtube.com/@FatihMakes) |
-| Instagram | [@fatihmakes](https://www.instagram.com/fatihmakes) |
+---
+*Built with precision for autonomy, performance, and security.*
