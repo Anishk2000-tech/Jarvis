@@ -293,9 +293,18 @@
       0%, 100% { opacity: 0.6; }
       50% { opacity: 1; }
     }
+    #bg-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
   </style>
 </head>
 <body>
+  <canvas id="bg-canvas"></canvas>
   <div class="ambient-glow"></div>
   <div class="container">
     <!-- Holographic Stark Arc Reactor Canvas -->
@@ -328,20 +337,100 @@
   </div>
 
   <script>
-    // ── STARK QUANTUM GYRO-REACTOR ANIMATION ENGINE ──────────────────────────
+    // ── BACKGROUND MOVING CYBER PIXELS & PARTICLES ENGINE ───────────────────
+    const bgCanvas = document.getElementById('bg-canvas');
+    const bgCtx = bgCanvas ? bgCanvas.getContext('2d') : null;
+    let bgParticles = [];
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let targetTiltX = 0, targetTiltY = 0;
+    let currentTiltX = 0, currentTiltY = 0;
+
+    function initBgParticles() {
+      if (!bgCanvas) return;
+      const w = bgCanvas.width = window.innerWidth;
+      const h = bgCanvas.height = window.innerHeight;
+      bgParticles = [];
+      const count = Math.floor(Math.min(75, (w * h) / 18000));
+      for (let i = 0; i < count; i++) {
+        bgParticles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: (Math.random() - 0.5) * 0.45,
+          size: Math.random() * 2.2 + 0.8,
+          alpha: Math.random() * 0.5 + 0.2,
+          hue: Math.random() > 0.4 ? 'rgba(0, 240, 255,' : 'rgba(0, 136, 255,',
+        });
+      }
+    }
+    window.addEventListener('resize', initBgParticles);
+    window.addEventListener('mousemove', e => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      targetTiltX = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
+      targetTiltY = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
+    });
+
+    function drawBgParticles() {
+      if (!bgCtx) return;
+      const w = bgCanvas.width;
+      const h = bgCanvas.height;
+      bgCtx.clearRect(0, 0, w, h);
+
+      currentTiltX += (targetTiltX - currentTiltX) * 0.05;
+      currentTiltY += (targetTiltY - currentTiltY) * 0.05;
+
+      for (let i = 0; i < bgParticles.length; i++) {
+        const p = bgParticles[i];
+        p.x += p.vx + currentTiltX * 0.2;
+        p.y += p.vy + currentTiltY * 0.2;
+
+        if (p.x < 0) p.x = w;
+        else if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h;
+        else if (p.y > h) p.y = 0;
+
+        bgCtx.fillStyle = p.hue + p.alpha + ')';
+        bgCtx.beginPath();
+        bgCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        bgCtx.fill();
+
+        for (let j = i + 1; j < bgParticles.length; j++) {
+          const p2 = bgParticles[j];
+          const dx = p.x - p2.x;
+          const dy = p.y - p2.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < 6400) { // ~80px
+            const dist = Math.sqrt(d2);
+            const a = (1 - dist / 80) * 0.16;
+            bgCtx.strokeStyle = `rgba(0, 240, 255, ${a})`;
+            bgCtx.lineWidth = 0.8;
+            bgCtx.beginPath();
+            bgCtx.moveTo(p.x, p.y);
+            bgCtx.lineTo(p2.x, p2.y);
+            bgCtx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(drawBgParticles);
+    }
+    initBgParticles();
+    requestAnimationFrame(drawBgParticles);
+
+    // ── STARK / WAYNE QUANTUM GYRO-REACTOR ENGINE ───────────────────────────
     const canvas = document.getElementById('reactor-canvas');
     const ctx = canvas.getContext('2d');
     let phase = 0;
     let boost = 1.0;
 
-    // Cosmic Stardust Particles
     const particles = [];
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 48; i++) {
       particles.push({
         angle: Math.random() * Math.PI * 2,
-        dist: 0.2 + Math.random() * 0.75,
-        speed: (0.003 + Math.random() * 0.007) * (Math.random() > 0.5 ? 1 : -1),
-        size: 1.0 + Math.random() * 2.4,
+        dist: 0.18 + Math.random() * 0.78,
+        speed: (0.003 + Math.random() * 0.008) * (Math.random() > 0.5 ? 1 : -1),
+        size: 1.0 + Math.random() * 2.5,
         alpha: 0.35 + Math.random() * 0.65,
         hue: Math.random() > 0.35 ? '#00f0ff' : '#ffb800',
       });
@@ -350,8 +439,8 @@
     document.getElementById('reactor-wrap').addEventListener('mouseenter', () => { boost = 2.4; });
     document.getElementById('reactor-wrap').addEventListener('mouseleave', () => { boost = 1.0; });
     document.getElementById('reactor-wrap').addEventListener('click', () => {
-      boost = 3.6;
-      setTimeout(() => { boost = 1.0; }, 800);
+      boost = 3.8;
+      setTimeout(() => { boost = 1.0; }, 900);
     });
 
     function setupHiDPI(c, context, cssW, cssH) {
@@ -375,12 +464,12 @@
 
       ctx.clearRect(0, 0, cssW, cssH);
 
-      // 1. Core Atmospheric Radial Glow
-      const breath = Math.sin(phase * 0.035) * 0.07;
+      // 1. Core Atmospheric Radial Bloom
+      const breath = Math.sin(phase * 0.035) * 0.08;
       const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.05, cx, cy, r * (0.95 + breath));
-      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.50)');
-      glowGrad.addColorStop(0.35, 'rgba(0, 136, 255, 0.20)');
-      glowGrad.addColorStop(0.75, 'rgba(0, 240, 255, 0.05)');
+      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.60)');
+      glowGrad.addColorStop(0.35, 'rgba(0, 136, 255, 0.22)');
+      glowGrad.addColorStop(0.75, 'rgba(0, 240, 255, 0.06)');
       glowGrad.addColorStop(1, 'transparent');
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
@@ -403,7 +492,7 @@
       });
       ctx.globalAlpha = 1.0;
 
-      // 3. Outer Static Calibration Ring & Laser Ticks
+      // 3. Precision Laser Graduation Ticks (72 radial marks)
       ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
@@ -415,7 +504,7 @@
         const isMajor = (i % 6 === 0);
         const len = isMajor ? r * 0.10 : r * 0.04;
         const r0 = r * 0.95 - len;
-        ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.80)' : 'rgba(0, 240, 255, 0.22)';
+        ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.85)' : 'rgba(0, 240, 255, 0.22)';
         ctx.lineWidth = isMajor ? 1.8 : 0.9;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
@@ -423,10 +512,25 @@
         ctx.stroke();
       }
 
-      // 4. Multi-Layered Counter-Rotating Kinetic Arcs with 3D Gimbal Effect
+      // 4. Segmented Rotating Nano-Aperture Gear Ring (36 notches)
+      const nTeeth = 36;
+      const rAperture = r * 0.77;
+      const rotGear = (phase * 0.012) % (Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.30)';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < nTeeth; i++) {
+        const gAng = (i * (360 / nTeeth) * Math.PI) / 180 + rotGear;
+        const ca = Math.cos(gAng), sa = Math.sin(gAng);
+        ctx.beginPath();
+        ctx.moveTo(cx + ca * (rAperture - 2.5), cy + sa * (rAperture - 2.5));
+        ctx.lineTo(cx + ca * (rAperture + 2.5), cy + sa * (rAperture + 2.5));
+        ctx.stroke();
+      }
+
+      // 5. Multi-Layered Counter-Rotating Kinetic Energy Arcs
       const arcLayers = [
         { rr: 0.92, span: 80,  count: 3, dir: +1, spd: 0.042, col: '#00f0ff', wid: 2.8 },
-        { rr: 0.82, span: 120, count: 2, dir: -1, spd: 0.034, col: 'rgba(0, 136, 255, 0.85)', wid: 2.2 },
+        { rr: 0.84, span: 120, count: 2, dir: -1, spd: 0.034, col: 'rgba(0, 136, 255, 0.85)', wid: 2.2 },
         { rr: 0.68, span: 55,  count: 4, dir: +1, spd: 0.060, col: '#ffb700', wid: 2.4 },
         { rr: 0.58, span: 100, count: 2, dir: -1, spd: 0.038, col: '#00f0ff', wid: 1.8 }
       ];
@@ -460,47 +564,63 @@
         }
       });
 
-      // 5. Dynamic 3D Gyroscopic Perspective Ring
+      // 6. Dual 3D Gyroscopic Gimbal Rings (Perspective Tilting)
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(phase * 0.016);
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.40)';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      const pitch = 0.42 + 0.08 * Math.sin(phase * 0.02);
-      ctx.ellipse(0, 0, r * 0.76, r * 0.76 * pitch, 0.3, 0, Math.PI * 2);
+      const pitch1 = 0.45 + 0.10 * Math.sin(phase * 0.02);
+      ctx.ellipse(0, 0, r * 0.74, r * 0.74 * pitch1, 0.35, 0, Math.PI * 2);
       ctx.stroke();
 
-      const satAng = -phase * 0.04;
-      const satX = Math.cos(satAng) * (r * 0.76);
-      const satY = Math.sin(satAng) * (r * 0.76 * pitch);
+      const satAng1 = -phase * 0.04;
+      const satX1 = Math.cos(satAng1) * (r * 0.74);
+      const satY1 = Math.sin(satAng1) * (r * 0.74 * pitch1);
       ctx.fillStyle = '#00ff9d';
       ctx.shadowColor = '#00ff9d';
       ctx.shadowBlur = 10;
       ctx.beginPath();
-      ctx.arc(satX, satY, 3.5, 0, Math.PI * 2);
+      ctx.arc(satX1, satY1, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
+
+      // Counter gimbal ring
+      ctx.rotate(-phase * 0.028);
+      ctx.strokeStyle = 'rgba(255, 184, 0, 0.35)';
+      ctx.beginPath();
+      const pitch2 = 0.38 + 0.08 * Math.cos(phase * 0.025);
+      ctx.ellipse(0, 0, r * 0.62, r * 0.62 * pitch2, -0.45, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
 
-      // 6. Frequency Pulse Needles
-      const nSpikes = 44;
-      const rSpike = r * 0.44;
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.60)';
-      ctx.lineWidth = 1.4;
-      for (let i = 0; i < nSpikes; i++) {
-        const ang = (i * (360 / nSpikes) * Math.PI) / 180 + phase * 0.012;
-        const h = r * (0.03 + 0.04 * Math.sin(phase * 0.08 + i * 0.75));
+      // 7. Magnetic Containment Triad Nodes (120° offsets)
+      const rTri = r * 0.44;
+      for (let t = 0; t < 3; t++) {
+        const tAng = (t * 120 * Math.PI) / 180 + phase * 0.008;
+        const tx = cx + Math.cos(tAng) * rTri;
+        const ty = cy + Math.sin(tAng) * rTri;
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(ang) * rSpike, cy + Math.sin(ang) * rSpike);
-        ctx.lineTo(cx + Math.cos(ang) * (rSpike + h), cy + Math.sin(ang) * (rSpike + h));
+        ctx.moveTo(cx + Math.cos(tAng) * (rTri - 6), cy + Math.sin(tAng) * (rTri - 6));
+        ctx.lineTo(cx + Math.cos(tAng) * (rTri + 7), cy + Math.sin(tAng) * (rTri + 7));
         ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 3.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       }
 
-      // 7. Central Obsidian Glass Quantum Lens
+      // 8. Central Obsidian Glass Quantum Lens
       const rInner = r * 0.34;
       const lensGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rInner);
-      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.70)');
+      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.72)');
       lensGrad.addColorStop(0.45, 'rgba(2, 24, 48, 0.95)');
       lensGrad.addColorStop(1, 'rgba(0, 240, 255, 0.88)');
 
@@ -514,8 +634,8 @@
 
       // Specular Glare across lens
       const glare = ctx.createLinearGradient(cx - rInner, cy - rInner, cx + rInner, cy + rInner);
-      glare.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
-      glare.addColorStop(0.4, 'rgba(255, 255, 255, 0.05)');
+      glare.addColorStop(0, 'rgba(255, 255, 255, 0.40)');
+      glare.addColorStop(0.4, 'rgba(255, 255, 255, 0.06)');
       glare.addColorStop(0.6, 'transparent');
       ctx.fillStyle = glare;
       ctx.beginPath();

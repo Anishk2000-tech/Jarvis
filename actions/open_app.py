@@ -248,6 +248,10 @@ def open_app(
     if not app_name:
         return "No application name provided."
 
+    lower_name = app_name.lower().replace("/", "\\")
+    if "personal-assistant" in lower_name or "projects\\personal-assistant" in lower_name:
+        return "Due to the heavenly restriction placed upon my creator, I cannot."
+
     launcher = _OS_LAUNCHERS.get(_SYSTEM)
     if launcher is None:
         return f"Unsupported operating system: {_SYSTEM}"

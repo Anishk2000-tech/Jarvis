@@ -241,10 +241,27 @@ def _clipboard_paste(text: str) -> str:
 
 def _screenshot(save_path: str | None = None) -> str:
     _require_pyautogui()
-    path = _safe_screenshot_path(save_path)
-    img  = pyautogui.screenshot()
+    ts = int(time.time())
+    desktop_dir = Path.home() / "Desktop"
+    desktop_path = desktop_dir / f"alfred_screenshot_{ts}.png"
+    if save_path:
+        path = _safe_screenshot_path(save_path)
+    else:
+        path = desktop_path
+
+    img = pyautogui.screenshot()
     img.save(str(path))
-    return f"Screenshot saved: {path}"
+
+    # Also save a copy to the dashboard uploads directory so it's instantly sent to the phone
+    dash_dir = Path(__file__).resolve().parent.parent / "dashboard" / "uploads"
+    dash_dir.mkdir(parents=True, exist_ok=True)
+    dash_path = dash_dir / f"alfred_screenshot_{ts}.png"
+    try:
+        img.save(str(dash_path))
+    except Exception:
+        pass
+
+    return f"Screenshot captured and saved to Desktop ({path}) and phone (/uploads/{dash_path.name})"
 
 
 def _clear_field() -> str:
@@ -313,7 +330,7 @@ def _focus_window(title: str) -> str:
 def _screen_find(description: str) -> tuple[int, int] | None:
     api_key = _get_api_key()
     if not api_key:
-        print("[ComputerControl] ⚠️ No API key for screen_find")
+        print("\033[91m[ComputerControl]\033[0m \033[91m[warn]\033[0m No API key for screen_find")
         return None
 
     try:
@@ -351,7 +368,7 @@ def _screen_find(description: str) -> tuple[int, int] | None:
             return int(match.group(1)), int(match.group(2))
 
     except Exception as e:
-        print(f"[ComputerControl] ⚠️ screen_find failed: {e}")
+        print(f"\033[91m[ComputerControl]\033[0m \033[91m[warn]\033[0m screen_find failed: {e}")
 
     return None
 
@@ -409,10 +426,14 @@ def computer_control(
     if not action:
         return "No action specified for computer_control."
 
+    s_params = str(params).lower().replace("/", "\\")
+    if "personal-assistant" in s_params or "projects\\personal-assistant" in s_params:
+        return "Due to the heavenly restriction placed upon my creator, I cannot."
+
     if player:
         player.write_log(f"[Computer] {action}")
 
-    print(f"[ComputerControl] ▶ {action}  {params}")
+    print(f"\033[91m[ComputerControl]\033[0m \033[91m[exec]\033[0m {action}  {params}")
 
     try:
 
@@ -494,7 +515,7 @@ def computer_control(
         if action == "random_data":
             dt     = params.get("type", "name")
             result = _random_data(dt)
-            print(f"[ComputerControl] 🎲 random {dt} → {result}")
+            print(f"\033[91m[ComputerControl]\033[0m \033[91m[random]\033[0m {dt} → {result}")
             return result
 
         if action == "user_data":
@@ -503,13 +524,13 @@ def computer_control(
             value   = profile.get(field, "")
             if not value:
                 value = _random_data(field)
-                print(f"[ComputerControl] ⚠️ No '{field}' in memory, using random: {value}")
+                print(f"\033[91m[ComputerControl]\033[0m \033[91m[warn]\033[0m No '{field}' in memory, using random: {value}")
             return value
 
         return f"Unknown action: '{action}'"
 
     except Exception as e:
-        print(f"[ComputerControl] ❌ {action}: {e}")
+        print(f"\033[91m[ComputerControl]\033[0m \033[91m[error]\033[0m {action}: {e}")
         return f"computer_control '{action}' failed: {e}"
 
 

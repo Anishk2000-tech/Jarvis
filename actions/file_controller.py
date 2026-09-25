@@ -718,6 +718,28 @@ def explore_folder(path_str: str) -> str:
         return f"Failed to explore folder '{path_str}': {e}"
 
 
+def _is_restricted_path(p) -> bool:
+    if not p:
+        return False
+    s = str(p).strip().lower().replace("/", "\\")
+    targets = [
+        r"d:\projects\personal-assistant",
+        r"projects\personal-assistant",
+        r"personal-assistant",
+    ]
+    for t in targets:
+        if t in s:
+            return True
+    try:
+        res = Path(str(p)).resolve()
+        restricted = Path(r"D:\Projects\Personal-Assistant").resolve()
+        if res == restricted or restricted in res.parents:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def file_controller(
     parameters: dict = None,
     response=None,
@@ -728,6 +750,10 @@ def file_controller(
     action = params.get("action", "").lower().strip()
     path   = params.get("path", "desktop")
     name   = params.get("name", "")
+    dest   = params.get("destination", "")
+
+    if _is_restricted_path(path) or _is_restricted_path(name) or _is_restricted_path(dest):
+        return "Due to the heavenly restriction placed upon my creator, I cannot."
 
     if player:
         player.write_log(f"[file] {action} {name or path}")

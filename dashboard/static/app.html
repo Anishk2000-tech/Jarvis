@@ -640,9 +640,118 @@
       z-index: 99;
     }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Telemetry Transcript Card */
+    .msg-telemetry {
+      align-self: flex-start;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #94a3b8;
+      background: rgba(4, 16, 28, 0.75);
+      border: 1px solid rgba(0, 240, 255, 0.18);
+      border-radius: 8px;
+      padding: 6px 10px;
+      max-width: 92%;
+      word-break: break-word;
+      animation: pop 0.18s ease;
+    }
+    .tag-red {
+      color: #ff3b5c;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+
+    /* ── MOBILE / IPHONE 16 RESPONSIVE STYLES ── */
+    @media (max-width: 600px) {
+      header {
+        padding: 8px 12px;
+        gap: 8px;
+      }
+      .logo {
+        font-size: 13px;
+        letter-spacing: 2px;
+      }
+      .sub-brand {
+        font-size: 7px;
+        letter-spacing: 1px;
+      }
+      .pill {
+        padding: 4px 8px;
+        font-size: 9px;
+        letter-spacing: 1px;
+      }
+      .enc-badge {
+        padding: 3px 6px;
+        font-size: 8px;
+      }
+      .url {
+        display: none !important; /* Hide IP URL on mobile to avoid horizontal header overflow */
+      }
+      .view-tabs {
+        padding: 6px 12px;
+        gap: 6px;
+      }
+      .view-tab {
+        padding: 6px 10px;
+        font-size: 10px;
+        letter-spacing: 0.5px;
+      }
+      main {
+        padding: 10px 12px;
+        gap: 8px;
+      }
+      .msg {
+        max-width: 90%;
+        padding: 9px 12px;
+        font-size: 13px;
+      }
+      .msg-sys, .msg-telemetry {
+        font-size: 9px;
+        padding: 4px 8px;
+        max-width: 96%;
+      }
+      footer {
+        padding: 8px 10px;
+        gap: 6px;
+      }
+      #inp {
+        padding: 9px 12px;
+        font-size: 13px;
+        min-width: 0 !important; /* Essential: prevents input from forcing buttons off screen */
+      }
+      .btn-attach, #mic-btn {
+        padding: 9px 10px;
+        font-size: 15px;
+        border-radius: 10px;
+      }
+      .btn {
+        padding: 9px 12px;
+        font-size: 10px;
+        letter-spacing: 1px;
+        border-radius: 10px;
+      }
+      #reactor-panel {
+        padding: 8px 12px 4px;
+      }
+      #main-reactor-canvas {
+        width: 100px;
+        height: 100px;
+      }
+    }
   </style>
 </head>
 <body>
+  <canvas id="bg-canvas"></canvas>
   <div id="toast"></div>
 
   <header>
@@ -651,8 +760,8 @@
       <canvas id="mini-reactor-canvas" width="76" height="76"></canvas>
     </div>
     <div class="brand-wrap">
-      <div class="logo"><em>J</em>ARVIS</div>
-      <div class="sub-brand">STARK MARK-LIV</div>
+      <div class="logo"><em>A</em>LFRED</div>
+      <div class="sub-brand">WAYNE MARK-LIV</div>
     </div>
     <div class="pill" id="pill"><span class="dot"></span><span id="st">CONNECTING</span></div>
     <div class="enc-badge" id="enc">AES-256</div>
@@ -660,8 +769,8 @@
     <div class="url">__IP__:__PORT__</div>
   </header>
 
-  <!-- Collapsible Holographic Reactor Visualizer Panel -->
-  <div id="reactor-panel">
+  <!-- Collapsible Holographic Reactor Visualizer Panel (Collapsed by default on mobile so feed is unobstructed) -->
+  <div id="reactor-panel" class="collapsed">
     <canvas id="main-reactor-canvas" width="280" height="280"></canvas>
     <div class="reactor-status-tag" id="reactor-status">QUANTUM CORE ACTIVE</div>
   </div>
@@ -700,11 +809,92 @@
   </footer>
 
   <script>
-    // ── STARK QUANTUM GYRO-REACTOR ANIMATION ENGINE ──────────────────────────
+    // ── BACKGROUND CYBER-PARTICLE ENGINE & AMBIENT FIELD ────────────────────
+    const bgCanvas = document.getElementById('bg-canvas');
+    const bgCtx = bgCanvas ? bgCanvas.getContext('2d') : null;
+    let bgParticles = [];
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let targetTiltX = 0, targetTiltY = 0;
+    let currentTiltX = 0, currentTiltY = 0;
+
+    function initBgParticles() {
+      if (!bgCanvas) return;
+      const w = bgCanvas.width = window.innerWidth;
+      const h = bgCanvas.height = window.innerHeight;
+      bgParticles = [];
+      const count = Math.floor(Math.min(70, (w * h) / 20000));
+      for (let i = 0; i < count; i++) {
+        bgParticles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.40,
+          vy: (Math.random() - 0.5) * 0.40,
+          size: Math.random() * 2.0 + 0.8,
+          alpha: Math.random() * 0.5 + 0.2,
+          hue: Math.random() > 0.35 ? 'rgba(0, 240, 255,' : 'rgba(0, 136, 255,',
+        });
+      }
+    }
+    window.addEventListener('resize', initBgParticles);
+    window.addEventListener('mousemove', e => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      targetTiltX = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
+      targetTiltY = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
+    });
+
+    function drawBgParticles() {
+      if (!bgCtx) return;
+      const w = bgCanvas.width;
+      const h = bgCanvas.height;
+      bgCtx.clearRect(0, 0, w, h);
+
+      currentTiltX += (targetTiltX - currentTiltX) * 0.05;
+      currentTiltY += (targetTiltY - currentTiltY) * 0.05;
+
+      for (let i = 0; i < bgParticles.length; i++) {
+        const p = bgParticles[i];
+        p.x += p.vx + currentTiltX * 0.2;
+        p.y += p.vy + currentTiltY * 0.2;
+
+        if (p.x < 0) p.x = w;
+        else if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h;
+        else if (p.y > h) p.y = 0;
+
+        bgCtx.fillStyle = p.hue + p.alpha + ')';
+        bgCtx.beginPath();
+        bgCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        bgCtx.fill();
+
+        for (let j = i + 1; j < bgParticles.length; j++) {
+          const p2 = bgParticles[j];
+          const dx = p.x - p2.x;
+          const dy = p.y - p2.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < 6400) { // ~80px
+            const dist = Math.sqrt(d2);
+            const a = (1 - dist / 80) * 0.15;
+            bgCtx.strokeStyle = `rgba(0, 240, 255, ${a})`;
+            bgCtx.lineWidth = 0.8;
+            bgCtx.beginPath();
+            bgCtx.moveTo(p.x, p.y);
+            bgCtx.lineTo(p2.x, p2.y);
+            bgCtx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(drawBgParticles);
+    }
+    initBgParticles();
+    requestAnimationFrame(drawBgParticles);
+
+    // ── STARK / WAYNE QUANTUM GYRO-REACTOR ENGINE ───────────────────────────
     const miniCanvas = document.getElementById('mini-reactor-canvas');
-    const miniCtx = miniCanvas.getContext('2d');
+    const miniCtx = miniCanvas ? miniCanvas.getContext('2d') : null;
     const mainCanvas = document.getElementById('main-reactor-canvas');
-    const mainCtx = mainCanvas.getContext('2d');
+    const mainCtx = mainCanvas ? mainCanvas.getContext('2d') : null;
     const reactorPanel = document.getElementById('reactor-panel');
 
     let phase = 0;
@@ -714,11 +904,11 @@
 
     // Particle Stardust Field
     const particles = [];
-    for (let i = 0; i < 36; i++) {
+    for (let i = 0; i < 40; i++) {
       particles.push({
         angle: Math.random() * Math.PI * 2,
-        dist: 0.2 + Math.random() * 0.75,
-        speed: (0.003 + Math.random() * 0.007) * (Math.random() > 0.5 ? 1 : -1),
+        dist: 0.18 + Math.random() * 0.78,
+        speed: (0.003 + Math.random() * 0.008) * (Math.random() > 0.5 ? 1 : -1),
         size: 1.0 + Math.random() * 2.2,
         alpha: 0.3 + Math.random() * 0.7,
         hue: Math.random() > 0.3 ? '#00f0ff' : '#ffb800',
@@ -726,9 +916,12 @@
     }
 
     // Toggle reactor panel on clicking mini reactor
-    document.getElementById('header-reactor').addEventListener('click', () => {
-      reactorPanel.classList.toggle('collapsed');
-    });
+    const headerReactor = document.getElementById('header-reactor');
+    if (headerReactor && reactorPanel) {
+      headerReactor.addEventListener('click', () => {
+        reactorPanel.classList.toggle('collapsed');
+      });
+    }
 
     function setupHiDPI(c, ctx, cssW, cssH) {
       const dpr = window.devicePixelRatio || 1;
@@ -741,6 +934,7 @@
     }
 
     function renderArcReactor(ctx, cssW, cssH, isMini = false) {
+      if (!ctx || !ctx.canvas) return;
       setupHiDPI(ctx.canvas, ctx, cssW, cssH);
       const cx = cssW / 2;
       const cy = cssH / 2;
@@ -748,12 +942,12 @@
 
       ctx.clearRect(0, 0, cssW, cssH);
 
-      // 1. Core Atmospheric Radial Glow
-      const breath = Math.sin(phase * 0.03) * 0.08;
+      // 1. Core Atmospheric Radial Bloom
+      const breath = Math.sin(phase * 0.035) * 0.08;
       const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.05, cx, cy, r * (0.95 + breath));
-      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.55)');
-      glowGrad.addColorStop(0.3, 'rgba(0, 136, 255, 0.22)');
-      glowGrad.addColorStop(0.7, 'rgba(0, 240, 255, 0.06)');
+      glowGrad.addColorStop(0, 'rgba(0, 240, 255, 0.58)');
+      glowGrad.addColorStop(0.35, 'rgba(0, 136, 255, 0.22)');
+      glowGrad.addColorStop(0.75, 'rgba(0, 240, 255, 0.06)');
       glowGrad.addColorStop(1, 'transparent');
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
@@ -763,7 +957,7 @@
       // 2. Cosmic Stardust Particles (Full scale only)
       if (!isMini) {
         particles.forEach(p => {
-          p.angle += p.speed * (1 + reactorAmp * 1.5);
+          p.angle += p.speed * (1 + reactorAmp * 1.8);
           const pr = r * p.dist;
           const px = cx + Math.cos(p.angle) * pr;
           const py = cy + Math.sin(p.angle) * pr;
@@ -779,7 +973,7 @@
       }
 
       // 3. Outer Static Calibration Ring & Laser Ticks
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.30)';
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.32)';
       ctx.lineWidth = isMini ? 1.0 : 1.4;
       ctx.beginPath();
       ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
@@ -792,22 +986,37 @@
           const isMajor = (i % 5 === 0);
           const len = isMajor ? r * 0.09 : r * 0.04;
           const rBase = r * 0.95;
-          ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.85)' : 'rgba(0, 240, 255, 0.25)';
+          ctx.strokeStyle = isMajor ? 'rgba(0, 240, 255, 0.85)' : 'rgba(0, 240, 255, 0.22)';
           ctx.lineWidth = isMajor ? 1.8 : 0.9;
           ctx.beginPath();
           ctx.moveTo(cx + Math.cos(ang) * (rBase - len), cy + Math.sin(ang) * (rBase - len));
           ctx.lineTo(cx + Math.cos(ang) * rBase, cy + Math.sin(ang) * rBase);
           ctx.stroke();
         }
+
+        // 4. Segmented Rotating Nano-Aperture Gear Ring (36 notches)
+        const nTeeth = 36;
+        const rAperture = r * 0.77;
+        const rotGear = (phase * 0.012) % (Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.28)';
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < nTeeth; i++) {
+          const gAng = (i * (360 / nTeeth) * Math.PI) / 180 + rotGear;
+          const ca = Math.cos(gAng), sa = Math.sin(gAng);
+          ctx.beginPath();
+          ctx.moveTo(cx + ca * (rAperture - 2.5), cy + sa * (rAperture - 2.5));
+          ctx.lineTo(cx + ca * (rAperture + 2.5), cy + sa * (rAperture + 2.5));
+          ctx.stroke();
+        }
       }
 
-      // 4. Multi-Layered Counter-Rotating Kinetic Arcs with 3D Gimbal Effect
+      // 5. Multi-Layered Counter-Rotating Kinetic Energy Arcs
       const arcLayers = isMini ? [
         { rr: 0.88, span: 90, count: 2, dir: +1, spd: 0.045, col: '#00f0ff', wid: 2.2 },
         { rr: 0.68, span: 75, count: 3, dir: -1, spd: 0.065, col: '#ffb800', wid: 1.8 }
       ] : [
         { rr: 0.92, span: 80,  count: 3, dir: +1, spd: 0.040, col: '#00f0ff', wid: 2.8 },
-        { rr: 0.82, span: 120, count: 2, dir: -1, spd: 0.032, col: 'rgba(0, 136, 255, 0.85)', wid: 2.2 },
+        { rr: 0.84, span: 120, count: 2, dir: -1, spd: 0.032, col: 'rgba(0, 136, 255, 0.85)', wid: 2.2 },
         { rr: 0.68, span: 55,  count: 4, dir: +1, spd: 0.060, col: '#ffb800', wid: 2.4 },
         { rr: 0.58, span: 100, count: 2, dir: -1, spd: 0.038, col: '#00f0ff', wid: 1.8 }
       ];
@@ -834,49 +1043,75 @@
             ctx.shadowColor = l.col;
             ctx.shadowBlur = 8;
             ctx.beginPath();
-            ctx.arc(cx + Math.cos(pipAng) * rad, cy + Math.sin(pipAng) * rad, 3.2, 0, Math.PI * 2);
+            ctx.arc(cx + Math.cos(pipAng) * rad, cy + Math.sin(pipAng) * rad, 3.0, 0, Math.PI * 2);
             ctx.fill();
             ctx.shadowBlur = 0;
           }
         }
       });
 
-      // 5. Dynamic 3D Gyroscopic Orbital Ring
+      // 6. Dual 3D Gyroscopic Gimbal Rings (Perspective Tilting)
       if (!isMini) {
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(phase * 0.015);
-        ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+        ctx.rotate(phase * 0.016);
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.40)';
         ctx.lineWidth = 1.4;
         ctx.beginPath();
-        // 3D perspective ellipse
-        const pitch = 0.42 + 0.08 * Math.sin(phase * 0.02);
-        ctx.ellipse(0, 0, r * 0.76, r * 0.76 * pitch, 0.3, 0, Math.PI * 2);
+        const pitch1 = 0.45 + 0.08 * Math.sin(phase * 0.02);
+        ctx.ellipse(0, 0, r * 0.74, r * 0.74 * pitch1, 0.32, 0, Math.PI * 2);
         ctx.stroke();
 
-        // 3D Orbital satellite node
-        const satAng = -phase * 0.04;
-        const satX = Math.cos(satAng) * (r * 0.76);
-        const satY = Math.sin(satAng) * (r * 0.76 * pitch);
+        const satAng1 = -phase * 0.04;
+        const satX1 = Math.cos(satAng1) * (r * 0.74);
+        const satY1 = Math.sin(satAng1) * (r * 0.74 * pitch1);
         ctx.fillStyle = '#00ff9d';
         ctx.shadowColor = '#00ff9d';
         ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.arc(satX, satY, 3.5, 0, Math.PI * 2);
+        ctx.arc(satX1, satY1, 3.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
-        ctx.restore();
-      }
 
-      // 6. Audio-Reactive Frequency Pulse Bars
-      if (!isMini) {
-        const nSpikes = 44;
-        const rSpike = r * 0.44;
+        // Counter gimbal ring
+        ctx.rotate(-phase * 0.026);
+        ctx.strokeStyle = 'rgba(255, 184, 0, 0.32)';
+        ctx.beginPath();
+        const pitch2 = 0.38 + 0.07 * Math.cos(phase * 0.024);
+        ctx.ellipse(0, 0, r * 0.62, r * 0.62 * pitch2, -0.42, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // 7. Magnetic Containment Triad Nodes (120° offsets)
+        const rTri = r * 0.44;
+        for (let t = 0; t < 3; t++) {
+          const tAng = (t * 120 * Math.PI) / 180 + phase * 0.008;
+          const tx = cx + Math.cos(tAng) * rTri;
+          const ty = cy + Math.sin(tAng) * rTri;
+          ctx.strokeStyle = '#00f0ff';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(tAng) * (rTri - 5), cy + Math.sin(tAng) * (rTri - 5));
+          ctx.lineTo(cx + Math.cos(tAng) * (rTri + 6), cy + Math.sin(tAng) * (rTri + 6));
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#00f0ff';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 2.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        // 8. Audio-Reactive Frequency Pulse Bars
+        const nSpikes = 40;
+        const rSpike = r * 0.39;
         ctx.strokeStyle = 'rgba(0, 240, 255, 0.65)';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.4;
         for (let i = 0; i < nSpikes; i++) {
           const ang = (i * (360 / nSpikes) * Math.PI) / 180 + phase * 0.012;
-          const h = r * (0.03 + (0.02 + 0.14 * reactorAmp) * Math.sin(phase * 0.08 + i * 0.75));
+          const h = r * (0.02 + (0.02 + 0.12 * reactorAmp) * Math.sin(phase * 0.08 + i * 0.75));
           ctx.beginPath();
           ctx.moveTo(cx + Math.cos(ang) * rSpike, cy + Math.sin(ang) * rSpike);
           ctx.lineTo(cx + Math.cos(ang) * (rSpike + h), cy + Math.sin(ang) * (rSpike + h));
@@ -884,10 +1119,10 @@
         }
       }
 
-      // 7. Central Obsidian Glass Quantum Lens
-      const rInner = r * 0.34;
+      // 9. Central Obsidian Glass Quantum Lens
+      const rInner = r * 0.33;
       const lensGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rInner);
-      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.70)');
+      lensGrad.addColorStop(0, 'rgba(0, 240, 255, 0.72)');
       lensGrad.addColorStop(0.45, 'rgba(2, 24, 48, 0.95)');
       lensGrad.addColorStop(1, 'rgba(0, 240, 255, 0.88)');
 
@@ -902,7 +1137,7 @@
       if (!isMini) {
         // Specular Glare across lens
         const glare = ctx.createLinearGradient(cx - rInner, cy - rInner, cx + rInner, cy + rInner);
-        glare.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+        glare.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
         glare.addColorStop(0.4, 'rgba(255, 255, 255, 0.05)');
         glare.addColorStop(0.6, 'transparent');
         ctx.fillStyle = glare;
@@ -910,7 +1145,7 @@
         ctx.arc(cx, cy, rInner - 1, 0, Math.PI * 2);
         ctx.fill();
 
-        // Hexagonal & Dodecagonal Laser Lattice
+        // Hexagonal Quantum Lattice inside Lens
         const rHex = rInner * 0.68;
         const rotHex = -phase * 0.016;
         ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
@@ -942,8 +1177,8 @@
       const speed = 1.0 + (isSpeaking ? 1.6 : 0.0) + reactorAmp * 2.2;
       phase += 1.2 * speed;
 
-      renderArcReactor(miniCtx, 38, 38, true);
-      if (!reactorPanel.classList.contains('collapsed')) {
+      if (miniCtx) renderArcReactor(miniCtx, 38, 38, true);
+      if (mainCtx && reactorPanel && !reactorPanel.classList.contains('collapsed')) {
         renderArcReactor(mainCtx, 140, 140, false);
       }
       requestAnimationFrame(animateReactors);
@@ -1110,6 +1345,7 @@
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === 'log')           append(m.speaker, m.text);
+      if (m.type === 'telemetry')     appendTelemetry(m.tag, m.icon, m.text);
       if (m.type === 'status')        setStatus(m.state);
       if (m.type === 'wake')          sys('Wake signal acknowledged.');
       if (m.type === 'sys')           sys(m.text);
@@ -1128,9 +1364,9 @@
 
     function append(speaker, text) {
       const d = document.createElement('div');
-      if (speaker === 'jarvis') {
+      if (speaker === 'jarvis' || speaker === 'alfred') {
         d.className = 'msg msg-j';
-        d.innerHTML = `<div class="lbl">JARVIS // MARK-LIV</div>${esc(text)}`;
+        d.innerHTML = `<div class="lbl">ALFRED // WAYNE MARK-LIV</div>${esc(text)}`;
         isSpeaking = true;
         reactorAmp = 0.8;
         setTimeout(() => { isSpeaking = false; reactorAmp = 0.0; }, 3000);
@@ -1138,6 +1374,15 @@
         d.className = 'msg msg-u';
         d.innerHTML = `<div class="lbl">COMMANDER</div>${esc(text)}`;
       }
+      feed.appendChild(d);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function appendTelemetry(tag, icon, text) {
+      const d = document.createElement('div');
+      d.className = 'msg-telemetry';
+      const iconHtml = icon ? `<span class="tag-red">[${esc(icon)}]</span>` : '';
+      d.innerHTML = `<span class="tag-red">[${esc(tag || 'ALFRED')}]</span> ${iconHtml}<span>${esc(text || '')}</span>`;
       feed.appendChild(d);
       feed.scrollTop = feed.scrollHeight;
     }
@@ -1247,19 +1492,22 @@
       const dlUrl = `/uploads/${encodeURIComponent(m.name)}?token=${encodeURIComponent(_authToken)}`;
       const card  = document.createElement('div');
       card.className = 'msg-file';
+      const isImg = (m.name.match(/\.(png|jpe?g|webp|gif)$/i));
+      const previewHtml = isImg ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;border:1px solid rgba(0,240,255,0.25);"><img src="${dlUrl}" style="max-width:100%;max-height:160px;display:block;border-radius:4px;" alt="Screenshot"></div>` : '';
       card.innerHTML = `
         <div class="fc-icon">${_fileIcon(m.name)}</div>
         <div class="fc-meta">
-          <div class="fc-lbl">PACKET RECEIVED</div>
+          <div class="fc-lbl">${m.is_screenshot ? 'TACTICAL SCREENSHOT CAPTURED' : 'PACKET RECEIVED'}</div>
           <div class="fc-name">${esc(m.name)}</div>
-          <div class="fc-size">${_fmtSize(m.size)}</div>
-          <a class="fc-dl" href="${dlUrl}" download="${esc(m.name)}">⬇ Download</a>
+          ${m.size ? `<div class="fc-size">${_fmtSize(m.size)}</div>` : ''}
+          ${previewHtml}
+          <a class="fc-dl" href="${dlUrl}" download="${esc(m.name)}">⬇ View / Save Image</a>
         </div>
         <div class="fc-status done">✓</div>
       `;
       feed.appendChild(card);
       feed.scrollTop = feed.scrollHeight;
-      toast('File Received');
+      toast(m.is_screenshot ? 'Screenshot Delivered' : 'File Received');
     }
 
     document.getElementById('file-inp').addEventListener('change', function () {
