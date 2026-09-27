@@ -16,7 +16,9 @@ from __future__ import annotations
 import difflib
 import re
 
-_WORD = re.compile(r"[\w']+", re.U)
+# Split on spaces and punctuation rather than matching \w: Python's \w leaves
+# out combining marks, which would cut Hindi and other Indic words into pieces.
+_WORD = re.compile(r"[^\s.,!?;:\"()\[\]{}…।|/\\-]+", re.U)
 
 
 def words(text: str) -> list[str]:

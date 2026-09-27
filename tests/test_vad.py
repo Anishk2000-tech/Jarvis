@@ -2,17 +2,14 @@ import wave, os
 import numpy as np
 from core import vad
 
-SP = "/tmp/claude-0/-home-user-Jarvis/c2721e9b-db56-5896-bce0-0f1c1c0ddab8/scratchpad"
-
-
-def load_speech():
-    w = wave.open(os.path.join(SP, "hello.wav"))
+def load_speech(path):
+    w = wave.open(path)
     x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
     return vad.resample(x, w.getframerate(), 16000)
 
 
-def run(det=None, noise=0.0):
-    speech = load_speech()
+def run(path, det=None, noise=0.0):
+    speech = load_speech(path)
     rng = np.random.default_rng(0)
     sil = np.zeros(16000, dtype=np.int16)
     stream = np.concatenate([sil, speech, sil, sil, speech, sil]).astype(np.float32)
@@ -26,16 +23,16 @@ def run(det=None, noise=0.0):
     return got, starts, seg.kind, speech.size
 
 
-def test_silero_finds_two_utterances():
-    got, starts, kind, n = run()
+def test_silero_finds_two_utterances(speech_wav):
+    got, starts, kind, n = run(speech_wav)
     assert kind == "silero"
     assert len(got) == 2 and len(starts) == 2, [g.size / 16000 for g in got]
     for g in got:
         assert 0.6 * n < g.size < 1.5 * n
 
 
-def test_energy_fallback_finds_utterances():
-    got, starts, kind, n = run(det=vad.EnergyVAD(), noise=30.0)
+def test_energy_fallback_finds_utterances(speech_wav):
+    got, starts, kind, n = run(speech_wav, det=vad.EnergyVAD(), noise=30.0)
     assert len(got) >= 2
 
 

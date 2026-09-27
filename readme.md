@@ -1,3 +1,94 @@
+# ⚙️ MARK LVI — JARVIS on any brain
+### Voice assistant for Windows 10/11 · local models (Ollama, LM Studio) or cloud (Gemini Live, OpenAI-compatible, Claude) · one-click installer, no Docker
+
+> Based on **MARK LV** by [FatihMakes](https://www.youtube.com/@FatihMakes) (CC BY-NC 4.0). Everything from Mark LV is still here — the holographic face, lip-sync, memory, undo, confirmation gate, phone dashboard, plugins — and Gemini Live is still the default realtime voice. This release adds a second, fully local engine and a large set of new abilities.
+
+## ⬇️ Install (Windows 10 / 11)
+
+1. Download **`JARVIS-Setup-<version>.exe`** from the [latest Windows build](../../releases/tag/latest-windows-build) (or from the *Windows installer* workflow's artifacts).
+2. Run it. It installs per-user into `%LOCALAPPDATA%\Programs\JARVIS` — **no administrator rights, no Python, no Docker, no WSL** needed. It bundles its own Python 3.12, every library, the Microsoft C++ runtime and the face-recognition models (~1.3 GB on disk).
+   *SmartScreen may warn that the app is unrecognised (the installer isn't code-signed): **More info → Run anyway**.*
+3. For free, private, offline AI install **[Ollama](https://ollama.com/download/windows)**. On first launch pick **Ollama**; the recommended model downloads automatically.
+4. Start menu → **JARVIS**. Troubleshooting: **JARVIS self-test** and **JARVIS (with log console)**; the log is `app\logs\jarvis.log`.
+
+Build it yourself (Linux or Windows): `pip install uv && python installer/build_windows.py` (needs NSIS, and MinGW on Linux). CI does exactly this, then installs the result on a clean Windows runner and runs the self-test before publishing.
+
+## 🧠 Brains
+
+| Brain | Engine | Notes |
+|---|---|---|
+| **Ollama** | local voice pipeline | Free, private, works offline. Auto-starts Ollama, auto-downloads the chosen model. |
+| **LM Studio** | local voice pipeline | Load a model, start the server (Developer tab). |
+| **Gemini Live** | Google realtime audio | Most natural full-duplex voice (the original engine). Free key. |
+| **OpenAI-compatible** | local voice pipeline | OpenAI, Groq, OpenRouter, DeepSeek, Mistral, Together, xAI, llama.cpp, Jan, vLLM. |
+| **Anthropic Claude** | local voice pipeline | Messages API with tools and vision. |
+| **Gemini (text)** | local voice pipeline | Gemini models via Google's OpenAI-compatible endpoint. |
+
+**Local voice pipeline:** Silero VAD → faster-whisper (on this PC) or Groq/OpenAI transcription → the brain with native tool calling (or a prompted-tool fallback for models without tool support) → streamed sentence-by-sentence speech with Edge neural voices (Indian English and Hindi included), Windows voices (offline fallback), Piper, Kokoro, ElevenLabs or OpenAI TTS — driving the same avatar lip-sync as Gemini Live.
+
+### Models for a 32 GB RAM + 4 GB GPU laptop
+
+| Role | Model | Why |
+|---|---|---|
+| Conversation | `qwen2.5:7b` | Reliable tool use; splits between GPU and RAM (a few seconds per reply) |
+| Fastest replies | `qwen2.5:3b` or `llama3.2:3b` | Fits entirely in 4 GB VRAM |
+| Vision (screen/camera) | `qwen2.5vl:3b` or `gemma3:4b` | Sees screenshots and the webcam |
+| Heavy agent tasks | `qwen2.5:14b` | Runs from system RAM — slow but capable |
+
+The settings screen detects your RAM/GPU and suggests models; small models automatically get a "lean" tool set and a 16k context.
+
+## 🚀 What's new in Mark LVI
+
+| Ability | How |
+|---|---|
+| 🧠 Any brain | Ollama, LM Studio, OpenAI-compatible, Claude, Gemini text, Gemini Live — chosen on first launch or in ⚙ → 🧠 AI BRAIN & VOICE |
+| 🗣️ Human-like conversation | Speaks while still thinking; **talk over it to interrupt** (its own echo is recognised and ignored); says a short "one moment" before slow tasks |
+| 👂 Always-on ambient listening | Hears the whole room, keeps a **local transcript**, answers only when called by name — or keeps going in a conversation it has joined. Ask "what did Rahul say about Friday?" |
+| 🙂 Face recognition | "Remember my face", "who is this?", greets you when you come back, optional **owner-only mode**, lock-on-leave and stranger alerts (photo to Telegram) |
+| 🖱️ Operates the computer like a person | `computer_agent` reads the screen through Windows UI Automation + OCR (+ numbered screenshots for vision models) and clicks/types/scrolls step by step |
+| 💻 Terminal | PowerShell / cmd / Python — install apps with winget, manage processes, files, network; destructive commands need confirmation |
+| 🏠 Smart home (SmartThings-style) | Home Assistant (2000+ brands), Samsung SmartThings (washers, ACs, TVs, Jet Bot), Tuya/Smart Life, Philips Hue, Yeelight, TP-Link Kasa/Tapo, WLED, ESPHome, Shelly, Tasmota, MQTT, Wake-on-LAN, custom HTTP — by name and room |
+| 🔌 ESP32 / Arduino / motors | Firmware in `firmware/`; pins, PWM, servos, DC motors (L298N/TB6612), steppers (A4988), sensors — over USB, WiFi or MQTT |
+| 🗓️ Scheduled tasks | "Every weekday at 8:30 read me the weather and news" — the assistant carries them out with its tools |
+| 🧩 Self-made skills | Saves routines, and writes new Python tools for itself (shown and installed only after you confirm) |
+| 🔗 MCP | Any Model Context Protocol server (filesystem, GitHub, Home Assistant, databases…) — `config/mcp_servers.json`, Claude Desktop format |
+| 📱 Telegram | Command JARVIS from anywhere, get replies, `/screenshot`, `/camera`, and notifications |
+| ✉️ E-mail | Read, search, send and reply (Gmail/Yahoo/iCloud app password, or the Outlook desktop app incl. calendar) |
+| 🎵 Media keys | Play/pause/next for Spotify, YouTube, VLC… |
+| ✅ Voice confirmation | Say "confirm"/"cancel" for shutdown, restart, WiFi, dangerous commands, e-mail and new skills — matched from the microphone, never by the model |
+
+## ⚠️ Honest limits
+
+* A local 3–8B model is capable but not a frontier model: complex multi-step GUI tasks succeed more often with `qwen2.5:7b` or larger, or with a cloud brain. The computer agent stops after a step limit, when stuck, when you say "stop", or when you move the mouse into a screen corner.
+* Barge-in works best with a headset; on loud laptop speakers it relies on echo rejection and may occasionally miss an interruption.
+* Face ID is identification, not security: there is no liveness check, so a photo can fool it.
+* Ambient listening records and transcribes conversations near the PC (stored only on this PC, deleted after 30 days by default). Let the people around you know, and check the rules where you live.
+* Smart-home control needs each ecosystem's own account/token (or Home Assistant) — devices are not reachable without one.
+
+## 🗂️ New files
+
+```
+core/brain_config.py   providers, models, voice & attention settings
+core/llm.py            one client for Ollama / OpenAI-compatible / Anthropic, tools + vision + fallbacks
+core/local_engine.py   the local voice engine (mixes into JarvisLive)
+core/vad.py stt_engine.py tts_engine.py speech_text.py attention.py journal.py
+core/screen_reader.py  UI Automation + OCR screen model      core/camera.py  shared webcam
+core/face_id.py        YuNet/SFace face recognition + presence
+core/scheduler.py mcp_client.py telegram_bridge.py runtime.py tool_schema.py downloader.py
+actions/  terminal, computer_agent, face_id, scheduled_tasks, conversation_log, skill_manager,
+          mcp_servers, telegram_notify, media_control
+plugins/  smart_home (+ _smart_home_backends), maker_hardware, email_client
+firmware/ jarvis_esp32 (ESP32/ESP8266), jarvis_arduino (Uno/Nano/Mega)
+ui_brain.py            AI BRAIN & VOICE settings / first-run screen
+selftest.py            python main.py --selftest
+installer/             Windows build: build_windows.py, jarvis.nsi, launcher.c
+tests/                 pytest suite (mock LLM server, headless end-to-end engine test)
+```
+
+---
+
+# Original MARK LV documentation
+
 # ⚙️ MARK LV (55)
 ### The Ultimate Cross-Platform Personal AI Assistant — By FatihMakes
 

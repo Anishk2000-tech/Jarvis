@@ -542,6 +542,8 @@ class LocalEngineMixin:
     def _stt_worker(self) -> None:
         while True:
             samples, during = self._utt_q.get()
+            if during and not brain_config.get_senses().get("barge_in", True):
+                continue      # our own voice, most likely — not worth the CPU
             try:
                 if not self._stt_ready.wait(timeout=0.5):
                     now = time.monotonic()

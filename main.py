@@ -15,6 +15,25 @@ if _platform.system() == "Windows":
     _subprocess.Popen = _Popen
 
 
+# ── No console (pythonw / JARVIS.exe): write the log to a file ──────────────
+# Without a console sys.stdout is None and every print() in the app would be
+# lost — or, in libraries that call sys.stderr.write directly, crash. The log
+# file is also the first thing to look at when something misbehaves.
+import sys as _sys0
+import os as _os0
+if _sys0.stdout is None or _sys0.stderr is None:
+    try:
+        _logdir = _os0.path.join(_os0.path.dirname(_os0.path.abspath(__file__)), "logs")
+        _os0.makedirs(_logdir, exist_ok=True)
+        _logfile = _os0.path.join(_logdir, "jarvis.log")
+        if _os0.path.exists(_logfile) and _os0.path.getsize(_logfile) > 4_000_000:
+            _os0.replace(_logfile, _logfile + ".1")
+        _fh = open(_logfile, "a", encoding="utf-8", buffering=1, errors="replace")
+        _sys0.stdout = _sys0.stdout or _fh
+        _sys0.stderr = _sys0.stderr or _fh
+    except Exception:
+        pass
+
 # ── Console must survive non-UTF-8 code pages ────────────────────────────────
 # Every status line in this file carries an emoji, and on a legacy Windows
 # console the active code page is the system one — cp1254 in Turkey, cp1251 in
@@ -2465,7 +2484,31 @@ class JarvisLive:
             print(f"[JARVIS] Reconnecting in {delay}s...")
             await asyncio.sleep(delay)
 
+def _single_instance() -> bool:
+    """False when another JARVIS is already running (Windows). Two copies would
+    fight over the microphone, the camera and the dashboard port."""
+    if _platform.system() != "Windows":
+        return True
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        global _INSTANCE_MUTEX
+        _INSTANCE_MUTEX = k32.CreateMutexW(None, False, "Local\\JARVIS-Assistant")
+        if k32.GetLastError() == 183:          # ERROR_ALREADY_EXISTS
+            ctypes.windll.user32.MessageBoxW(
+                None, "JARVIS is already running — look for it on the taskbar.", "JARVIS", 0x40)
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def main():
+    if "--selftest" in sys.argv:
+        import selftest
+        sys.exit(selftest.main())
+    if not _single_instance():
+        return
     ui = JarvisUI("face.png")
 
     def runner():

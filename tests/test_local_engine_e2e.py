@@ -20,7 +20,6 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SP = "/tmp/claude-0/-home-user-Jarvis/c2721e9b-db56-5896-bce0-0f1c1c0ddab8/scratchpad"
 
 from tests.mock_llm_server import MockLLM  # noqa: E402
 
@@ -153,7 +152,7 @@ def sandbox_config():
     shutil.rmtree(os.path.join(ROOT, "memory", "journal"), ignore_errors=True)
 
 
-def test_voice_request_runs_tool_and_speaks(sandbox_config, monkeypatch):
+def test_voice_request_runs_tool_and_speaks(sandbox_config, monkeypatch, speech_wav):
     server = MockLLM(llm_script, models=("test-model",))
     os.makedirs(os.path.dirname(sandbox_config), exist_ok=True)
     json.dump({"os_system": "linux", "assistant_name": "JARVIS", "morning_brief_enabled": False,
@@ -184,7 +183,7 @@ def test_voice_request_runs_tool_and_speaks(sandbox_config, monkeypatch):
     assert FakeInput.instances, ui.logs
     assert any("Brain ready" in l for l in ui.logs), ui.logs
 
-    w = wave.open(os.path.join(SP, "hello.wav"))
+    w = wave.open(speech_wav)
     from core.vad import resample
     speech = resample(np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16), w.getframerate(), 16000)
     mic = FakeInput.instances[-1]

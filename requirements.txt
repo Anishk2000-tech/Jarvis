@@ -107,3 +107,20 @@ pynvml                       # system_monitor + the HUD's GPU meter (NVIDIA)
 # macOS / Linux OS actions (volume, brightness, reminders) shell out to native
 # tools (pactl / brightnessctl / osascript / systemd), so no extra Python
 # packages are needed there — nothing Windows-specific is ever pulled in.
+
+# ── Mark LVI: local brains (Ollama / LM Studio / APIs) ─────────────────────────
+# Speech in, speech out, voice activity and screen OCR for the local engine,
+# plus smart-home / hardware / network extras. The Windows installer bundles
+# all of these (installer/requirements-windows.txt).
+faster-whisper>=1.1,<2
+onnxruntime>=1.18,<2
+edge-tts>=7,<8
+miniaudio>=1.60,<2
+soundfile>=0.12,<1
+piper-tts>=1.3,<2
+kokoro-onnx>=0.4,<1
+rapidocr-onnxruntime>=1.4,<2
+pyserial
+zeroconf
+python-kasa
+pandas>=2,<3

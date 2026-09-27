@@ -1,0 +1,25 @@
+#include <winver.h>
+1 ICON "jarvis.ico"
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 56,0,0,0
+PRODUCTVERSION 56,0,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "JARVIS personal AI assistant"
+      VALUE "ProductName", "JARVIS"
+      VALUE "ProductVersion", "Mark LVI"
+      VALUE "FileVersion", "56.0"
+      VALUE "OriginalFilename", "JARVIS.exe"
+      VALUE "LegalCopyright", "CC BY-NC 4.0 - based on MARK LV by FatihMakes"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

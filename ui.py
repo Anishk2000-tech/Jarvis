@@ -72,6 +72,16 @@ CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
 
+def _installed_launcher() -> Path | None:
+    """JARVIS.exe when running from the Windows installer's layout, else None."""
+    for base in (os.environ.get("JARVIS_HOME", ""), str(BASE_DIR.parent)):
+        if base:
+            exe = Path(base) / "JARVIS.exe"
+            if exe.exists():
+                return exe
+    return None
+
+
 def _read_full_config() -> dict:
     """Read api_keys.json config dict. Returns {} on any error."""
     try:
@@ -3733,12 +3743,19 @@ class MainWindow(QMainWindow):
 
             # ── Windows ───────────────────────────────────────────────────────
             if _os == "Windows":
-                pythonw  = python.parent / "pythonw.exe"
-                target   = str(pythonw if pythonw.exists() else python)
-                lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
-                self._create_lnk_windows(lnk, target, str(script),
-                                         str(script.parent), icon_loc)
+                launcher = _installed_launcher()
+                if launcher:
+                    # Installed build: the launcher sets up the environment.
+                    lnk = str(desktop / "JARVIS.lnk")
+                    self._create_lnk_windows(lnk, str(launcher), "",
+                                             str(launcher.parent), f"{launcher},0")
+                else:
+                    pythonw  = python.parent / "pythonw.exe"
+                    target   = str(pythonw if pythonw.exists() else python)
+                    lnk      = str(desktop / "J.A.R.V.I.S.lnk")
+                    icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
+                    self._create_lnk_windows(lnk, target, str(script),
+                                             str(script.parent), icon_loc)
 
             # ── macOS — proper .app bundle (no Terminal window) ───────────────
             elif _os == "Darwin":
@@ -4986,10 +5003,14 @@ class MainWindow(QMainWindow):
                 if currently_on:
                     winreg.DeleteValue(reg, "JARVIS_AI")
                 else:
-                    pythonw = Path(sys.executable).parent / "pythonw.exe"
-                    exe = str(pythonw if pythonw.exists() else sys.executable)
-                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ,
-                                      f'"{exe}" "{script}"')
+                    launcher = _installed_launcher()
+                    if launcher:
+                        value = f'"{launcher}"'
+                    else:
+                        pythonw = Path(sys.executable).parent / "pythonw.exe"
+                        exe = str(pythonw if pythonw.exists() else sys.executable)
+                        value = f'"{exe}" "{script}"'
+                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ, value)
                 winreg.CloseKey(reg)
             elif _OS == "Darwin":
                 plist_dir = Path.home() / "Library" / "LaunchAgents"
