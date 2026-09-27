@@ -899,7 +899,7 @@ def stream_chat(messages: list[dict], declarations=None, s: Settings | None = No
         raise LLMError("No model is selected. Choose one in ⚙ → AI BRAIN.")
     if not s.model and s.provider == "lmstudio":
         try:
-            names = list_models(s)
+            names = [n for n in list_models(s) if "embed" not in n.lower()]
             s.model = names[0] if names else ""
         except Exception:
             pass
