@@ -244,6 +244,33 @@ def capabilities(s: Settings, model: str | None = None) -> dict:
     return caps
 
 
+def model_size_b(s: Settings, model: str | None = None) -> float | None:
+    """Parameter count in billions, when the server reports it (Ollama)."""
+    model = model or s.model
+    key = ("size", s.provider, s.base_url, model)
+    with _caps_lock:
+        if key in _caps_cache:
+            return _caps_cache[key].get("b")
+    size = None
+    if s.provider == "ollama":
+        try:
+            r = requests.post(f"{_ollama_base(s)}/api/show", json={"model": model}, timeout=8)
+            if r.status_code == 200:
+                ps = str((r.json().get("details") or {}).get("parameter_size") or "")
+                m = re.match(r"([\d.]+)\s*([BM])", ps.upper())
+                if m:
+                    size = float(m.group(1)) / (1000.0 if m.group(2) == "M" else 1.0)
+        except Exception:
+            pass
+    if size is None:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*b\b", (model or "").lower().replace(":", " ").replace("-", " "))
+        if m:
+            size = float(m.group(1))
+    with _caps_lock:
+        _caps_cache[key] = {"b": size}
+    return size
+
+
 def forget_capabilities() -> None:
     with _caps_lock:
         _caps_cache.clear()

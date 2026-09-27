@@ -855,6 +855,20 @@ class JarvisLive:
         if loop and ev is not None:
             loop.call_soon_threadsafe(ev.set)
 
+    def reload_plugins(self) -> str:
+        """Re-scan plugins/ (a skill was just installed) and rebuild the session
+        so the model is told about the new tool — the conversation is kept."""
+        _base_dir = Path(__file__).resolve().parent
+        _core = {t["name"] for t in TOOL_DECLARATIONS} | self._action_registry.names()
+        self._plugin_registry = discover_plugins(
+            plugins_dir=_base_dir / "plugins", core_tool_names=_core,
+            logger=lambda msg: print(f"[Plugins] {msg}"),
+            notify=lambda msg: self.ui.write_log(f"SYS: {msg}"))
+        self.ui.get_plugins = self._plugin_registry.list_for_ui
+        self.ui.get_plugin_settings = self._plugin_registry.settings_schemas
+        self.request_reconnect(keep_context=True, reason="new skill")
+        return f"Plugins reloaded: {len(self._plugin_registry.get_tool_declarations())} active."
+
     def _on_voice_change(self):
         """Voice picker applied.
 
@@ -986,6 +1000,12 @@ class JarvisLive:
     def interrupt(self) -> None:
         """Stop JARVIS mid-speech: drain queued audio and open mic immediately."""
         self._interrupted = True
+        # Long-running tools (the computer agent) watch this to stop mid-task.
+        try:
+            from core import runtime as _rt
+            _rt.set_state("interrupt_at", time.monotonic())
+        except Exception:
+            pass
         q = self.audio_in_queue
         if q:
             drained = 0

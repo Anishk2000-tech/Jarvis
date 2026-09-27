@@ -3302,37 +3302,27 @@ class MainWindow(QMainWindow):
         t.start()
 
     def _cam_loop(self) -> None:
+        # The camera is shared (core/camera.py): face presence and the vision
+        # tool read the same device, which on Windows cannot be opened twice.
+        from core.camera import hub as _camera_hub
+        hub = _camera_hub()
+        hub.acquire()
         try:
             import cv2
-            # Reuse camera index detected by screen_processor (cached in api_keys.json)
-            cam_idx = 0
-            try:
-                import json as _j
-                cfg = _j.loads((CONFIG_DIR / "api_keys.json").read_text())
-                cam_idx = int(cfg.get("camera_index", 0))
-            except Exception:
-                pass
-            try:
-                backend = cv2.CAP_DSHOW if _OS == "Windows" else cv2.CAP_ANY
-            except AttributeError:
-                backend = 0
-            cap = cv2.VideoCapture(cam_idx, backend)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(0)
-            if not cap.isOpened():
+            if hub.wait_frame(timeout=6.0) is None:
                 return
-            # warm-up frames
-            for _ in range(5):
-                cap.read()
-            while not self._cam_stop.wait(0.033) and cap.isOpened():
-                ret, frame = cap.read()
-                if ret and frame is not None:
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-                    self._cam_frame_sig.emit(buf.tobytes())
-            cap.release()
+            while not self._cam_stop.wait(0.033):
+                frame = hub.latest(max_age=2.0)
+                if frame is None:
+                    if not hub.active:
+                        break
+                    continue
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                self._cam_frame_sig.emit(buf.tobytes())
         except Exception as e:
             print(f"[Camera] Stream error: {e}")
         finally:
+            hub.release()
             self._cam_stream_sig.emit(False)
 
     def stop_camera_stream(self) -> None:

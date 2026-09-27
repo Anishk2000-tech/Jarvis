@@ -183,7 +183,14 @@ class LocalEngineMixin:
             decls += mcp_client.manager().gemini_declarations()
         except Exception:
             pass
-        disabled = set(brain_config.get_brain().get("disabled_tools") or [])
+        b = brain_config.get_brain()
+        disabled = set(b.get("disabled_tools") or [])
+        profile = str(b.get("tool_profile") or "auto").lower()
+        if profile == "auto" and b.get("provider") in ("ollama", "lmstudio"):
+            size = llm.model_size_b(llm.settings_for("chat"))
+            profile = "lean" if (size is not None and size < 6.5) else "full"
+        if profile == "lean":
+            disabled |= set(brain_config.LEAN_HIDDEN)
         return [d for d in decls if d.get("name") not in disabled]
 
     def _submit(self, text: str, images=None, source: str = "system", lang: str = "") -> None:

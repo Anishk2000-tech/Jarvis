@@ -116,7 +116,8 @@ _DEFAULT_BRAIN = {
     "vision_model": "",        # screenshots / camera ("" = model if it can see)
     "fast_model": "",          # one-line classifications ("" = model)
     "temperature": 0.6,
-    "num_ctx": 8192,           # Ollama context window — its own default is too small
+    "num_ctx": 16384,          # Ollama context window — its own default is far too small
+    "tool_profile": "auto",    # auto | full | lean  (lean hides niche tools for small models)
     "keep_alive": "30m",
     "tool_mode": "auto",       # auto | native | prompted
     "compact_tools": True,     # shorter tool descriptions for small models
@@ -218,9 +219,9 @@ def get_brain() -> dict:
     if b["provider"] == "gemini" and not b.get("api_key"):
         b["api_key"] = _read().get("gemini_api_key", "")
     try:
-        b["num_ctx"] = max(2048, min(131072, int(b.get("num_ctx") or 8192)))
+        b["num_ctx"] = max(4096, min(131072, int(b.get("num_ctx") or 16384)))
     except (TypeError, ValueError):
-        b["num_ctx"] = 8192
+        b["num_ctx"] = 16384
     try:
         b["temperature"] = float(b.get("temperature", 0.6))
     except (TypeError, ValueError):
@@ -236,6 +237,14 @@ def get_brain() -> dict:
 
 def save_brain(updates: dict) -> None:
     _save_section("brain", updates)
+
+
+# Hidden from small models by the "lean" tool profile: tools for one hobby or a
+# rare job, whose descriptions cost context and add wrong choices. Any of them
+# can still be reached on a bigger model, or with the profile set to "full".
+LEAN_HIDDEN = ("flight_finder", "game_updater", "youtube_video", "dev_agent", "code_helper",
+               "manage_monitor", "mcp_servers", "skill_manager", "desktop_control",
+               "file_processor", "telegram_notify", "hardware_control", "email")
 
 
 def provider() -> str:

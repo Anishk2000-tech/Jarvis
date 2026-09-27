@@ -169,8 +169,8 @@ def to_openai_tools(declarations, compact: bool = False) -> list[dict]:
             "type": "function",
             "function": {
                 "name": name,
-                "description": _shorten(desc, 320) if compact else " ".join(desc.split()),
-                "parameters": gemini_to_json_schema(params, desc_limit=140 if compact else 0),
+                "description": _shorten(desc, 220) if compact else " ".join(desc.split()),
+                "parameters": gemini_to_json_schema(params, desc_limit=70 if compact else 0),
             },
         })
     return tools
