@@ -134,7 +134,7 @@ Section /o "Start JARVIS when Windows starts" SecAutostart
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "JARVIS_AI" '"$INSTDIR\JARVIS.exe"'
 SectionEnd
 
-Section "Browser automation engine (downloads ~150 MB)" SecChromium
+Section /o "Extra Chromium for browser automation (~150 MB download)" SecChromium
   DetailPrint "Downloading Chromium for browser automation (needs internet)…"
   nsExec::ExecToLog '"$INSTDIR\python\python.exe" -m playwright install chromium'
   Pop $0
@@ -151,7 +151,7 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "The assistant and its private Python runtime."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A JARVIS icon on the desktop."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAutostart} "Always-on assistant: start with Windows."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecChromium} "Lets JARVIS click, type and fill forms on web pages."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecChromium} "Not needed normally: JARVIS automates your installed Edge or Chrome. Tick only if web automation reports a missing browser."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOllama} "Ollama runs free AI models on this PC. Install it to use JARVIS offline."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
