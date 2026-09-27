@@ -91,6 +91,16 @@ def is_stop_command(text: str) -> bool:
     return bool(ws) and len(ws) <= 5 and any(w in _STOP for w in ws)
 
 
+def is_self_echo(heard: str, spoken_recently: list[str]) -> bool:
+    """True when a transcript is clearly a replay of our own recent words.
+
+    Short answers ("confirm", "yes confirm") are never treated as echo even if
+    those words were just said — the timing checks (nothing heard while
+    speaking or during the echo tail counts) are what keep echo out; this only
+    catches a longer phrase that slipped through."""
+    return len(words(heard)) >= 3 and echo_fraction(heard, spoken_recently) >= 0.8
+
+
 _YES = {"yes", "yeah", "yep", "yup", "confirm", "confirmed", "sure", "ok", "okay", "go", "proceed",
         "do", "affirmative", "correct", "haan", "han", "ha", "haa", "ji", "theek", "thik", "chalo",
         "हाँ", "हां", "जी", "ठीक", "evet", "tamam", "sí", "si", "oui", "ja", "da"}

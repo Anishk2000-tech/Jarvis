@@ -5608,9 +5608,17 @@ class MainWindow(QMainWindow):
             self._overlay = None
         self._apply_state("LISTENING")
         self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
-        from core import brain_config
+        from core import brain_config, runtime
         label = brain_config.PROVIDER_LABELS.get(brain_config.provider(), "")
         self._log.append_log(f"SYS: Initialised — {label}. {self._assistant_name} starting…")
+        # Shown again after a rejected key while an engine is already running:
+        # if the brain now needs the other engine, start afresh.
+        eng = runtime.engine()
+        if eng is not None:
+            running_local = getattr(eng, "engine_kind", "") == "local"
+            if running_local != brain_config.uses_local_engine():
+                self._log.append_log("SYS: Switching engines — restarting in a moment…")
+                QTimer.singleShot(1200, runtime.restart_app)
 
     # ── AI brain & voice settings ────────────────────────────────────────────
     def _open_brain_settings(self, message: str = ""):

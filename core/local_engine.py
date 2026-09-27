@@ -171,6 +171,7 @@ class LocalEngineMixin:
         self._brain_ok = False
         self._pull_started: set[str] = set()
         self._stt_wait_note = 0.0
+        self._brain_retry = False
         self._asst_name = brain_config.assistant_name()
         runtime.set_engine(self)
 
@@ -336,8 +337,10 @@ class LocalEngineMixin:
         if s.provider == "ollama":
             if not llm.ensure_ollama_running(s):
                 self._brain_ok = False
-                self._log_async("ERR: Ollama is not running. Install it from https://ollama.com/download "
-                                "and start it — I will keep trying.")
+                if not self._brain_retry:
+                    self._log_async("ERR: Ollama is not running. Install it from https://ollama.com/download "
+                                    "and start it — I will keep trying.")
+                self._retry_brain_check()
                 return
         ok, msg = llm.ping(s)
         if not ok and s.provider == "ollama" and "not downloaded" in msg and s.model not in self._pull_started:
@@ -356,8 +359,13 @@ class LocalEngineMixin:
                 ok, msg = llm.ping(s)
         if not ok:
             self._brain_ok = False
-            self._log_async(f"ERR: Brain unavailable — {msg}")
+            if not self._brain_retry:
+                self._log_async(f"ERR: Brain unavailable — {msg}")
+            if isinstance(msg, str) and ("not running" in msg or "not reachable" in msg
+                                         or "Cannot reach" in msg or "no model is loaded" in msg):
+                self._retry_brain_check()
             return
+        self._brain_retry = False
         self._brain_ok = True
         model = s.model or "(loaded model)"
         if s.provider not in ("ollama", "lmstudio"):
@@ -372,6 +380,14 @@ class LocalEngineMixin:
             self._log_async(f"SYS: Brain ready ({time.monotonic() - t0:.1f}s).")
         except Exception as e:
             self._log_async(f"ERR: Brain warm-up failed — {str(e)[:200]}")
+
+    def _retry_brain_check(self, delay: float = 20.0) -> None:
+        """The brain server is not up yet (Ollama still starting, LM Studio's
+        server not switched on): look again in a while, quietly, until it is."""
+        self._brain_retry = True
+        t = threading.Timer(delay, self._check_brain)
+        t.daemon = True
+        t.start()
 
     # ── main loop ────────────────────────────────────────────────────────────
     async def run(self):
@@ -573,8 +589,12 @@ class LocalEngineMixin:
         name = (self._asst_name or "JARVIS").strip()
         ws = attention.words(text)
 
-        # 1. A spoken answer to a pending confirmation.
-        if senses.get("voice_confirm", True) and confirm_gate.pending_title():
+        # 1. A spoken answer to a pending confirmation. Never from anything heard
+        #    while we were talking, and never from words we said ourselves —
+        #    the assistant asking "say confirm" must not confirm itself.
+        if (senses.get("voice_confirm", True) and confirm_gate.pending_title()
+                and not (during or self._is_speaking or self._tail_active())
+                and not attention.is_self_echo(text, self._recent_spoken(30))):
             ans = attention.confirm_answer(text)
             if ans is not None:
                 self.ui.write_log(f"You: {text}")
@@ -584,6 +604,11 @@ class LocalEngineMixin:
 
         # 2. Heard while we were talking: our own echo, or the user cutting in.
         named = attention.addressed_by_name(text, name, senses.get("name_aliases") or [])
+        if self._busy and not (during or self._is_speaking) and attention.is_stop_command(text):
+            # Thinking or running a tool, not speaking: "stop" cancels the task.
+            self.ui.write_log(f"You: {text}")
+            self.interrupt()
+            return
         if during or self._is_speaking:
             recent = self._recent_spoken()
             frac = attention.echo_fraction(text, recent)

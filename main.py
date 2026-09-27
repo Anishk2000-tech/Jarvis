@@ -2260,6 +2260,10 @@ class JarvisLive:
                 return False
             if not confirm_gate.pending_title():
                 return False
+            # Our own last sentence coming back through the speakers ("say
+            # confirm on screen…") must never count as the user's answer.
+            if attention.is_self_echo(heard, [self._last_out_logged or ""]):
+                return False
             ans = attention.confirm_answer(heard)
             if ans is None:
                 return False

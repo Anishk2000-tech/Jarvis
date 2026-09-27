@@ -31,3 +31,11 @@ def test_stop_and_confirm():
     assert a.confirm_answer("no, cancel that") is False
     assert a.confirm_answer("don't") is False
     assert a.confirm_answer("what is the time in london today please tell me") is None
+
+
+def test_own_prompt_is_echo_not_confirmation():
+    spoken = ["I need you to confirm that on screen, or just say confirm."]
+    assert a.is_self_echo("or just say confirm", spoken)          # our own words
+    assert not a.is_self_echo("confirm", spoken)                  # the user's answer
+    assert not a.is_self_echo("yes confirm", spoken)
+    assert not a.is_self_echo("yes go ahead and do it", spoken)
