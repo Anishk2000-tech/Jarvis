@@ -82,7 +82,7 @@ def _read_full_config() -> dict:
 
 # Single source of truth for the release name — the window title, the header
 # badge and the readme must never disagree again.
-APP_VERSION  = "MARK LV"
+APP_VERSION  = "MARK LVI"
 APP_PROTOCOL = APP_VERSION.split()[-1]
 
 _DEFAULT_W, _DEFAULT_H = 980, 700
@@ -3251,7 +3251,9 @@ class MainWindow(QMainWindow):
         self._clipboard_panel.action_requested.connect(self._on_clipboard_action)
         QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
-        self._overlay: SetupOverlay | None = None
+        self._overlay = None
+        self._setup_message = ""
+        self.on_brain_change = None     # callable: () -> None, set by the engine
         self._ready = self._check_config()
         if not self._ready:
             self._show_setup()
@@ -4189,6 +4191,14 @@ class MainWindow(QMainWindow):
                           f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
         lay.addWidget(hdr)
 
+        brain_btn = QPushButton("🧠  AI BRAIN & VOICE")
+        brain_btn.setFixedHeight(30)
+        brain_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        brain_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        brain_btn.setStyleSheet(_BTN_STYLE_PRI)
+        brain_btn.clicked.connect(lambda: self._open_brain_settings())
+        lay.addWidget(brain_btn)
+
         remote_btn = QPushButton("◉  REMOTE CONTROL")
         remote_btn.setFixedHeight(30)
         remote_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
@@ -4286,6 +4296,10 @@ class MainWindow(QMainWindow):
 
         self._brief_btn = _row(QPushButton())
         self._brief_btn.clicked.connect(self._toggle_brief)
+
+        self._listen_btn = _row(QPushButton())
+        self._listen_btn.clicked.connect(self._toggle_listen_mode)
+        self._refresh_listen_btn()
 
         self._wake_btn = _row(QPushButton())
         self._wake_btn.clicked.connect(self._toggle_wake_word)
@@ -5542,39 +5556,98 @@ class MainWindow(QMainWindow):
         self.hud.speaking = (state == "SPEAKING")
 
     def _check_config(self) -> bool:
-        if not API_FILE.exists(): return False
         try:
-            d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
+            from core import brain_config
+            return brain_config.is_configured()
         except Exception:
             return False
 
-    def _show_setup(self):
-        ov = SetupOverlay(self.centralWidget())
+    def _show_setup(self, message: str = ""):
+        """First launch, or a rejected API key: the brain picker, full-window."""
+        from ui_brain import BrainSettingsOverlay
+        if self._overlay is not None:
+            try:
+                self._overlay.hide()
+                self._overlay.deleteLater()
+            except Exception:
+                pass
         cw = self.centralWidget()
-        ow, oh = 460, 390
-        ov.setGeometry(
-            (cw.width()  - ow) // 2,
-            (cw.height() - oh) // 2,
-            ow, oh,
-        )
-        ov.done.connect(self._on_setup_done)
+        ov = BrainSettingsOverlay(cw, first_run=True, message=message or self._setup_message)
+        ow, oh = min(560, cw.width() - 24), min(640, cw.height() - 24)
+        ov.setGeometry((cw.width() - ow) // 2, (cw.height() - oh) // 2, ow, oh)
+        ov.saved.connect(self._on_setup_done)
         ov.show()
+        ov.raise_()
         self._overlay = ov
 
-    def _on_setup_done(self, key: str, os_name: str):
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
-            encoding="utf-8",
-        )
+    def _on_setup_done(self, _needs_restart: bool = False):
         self._ready = True
         if self._overlay:
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
         self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
+        from core import brain_config
+        label = brain_config.PROVIDER_LABELS.get(brain_config.provider(), "")
+        self._log.append_log(f"SYS: Initialised — {label}. {self._assistant_name} starting…")
+
+    # ── AI brain & voice settings ────────────────────────────────────────────
+    def _open_brain_settings(self, message: str = ""):
+        from ui_brain import BrainSettingsOverlay
+        self._close_setup()
+        cw = self.centralWidget()
+        ov = BrainSettingsOverlay(cw, first_run=False, message=message)
+        ow, oh = min(560, cw.width() - 24), min(660, cw.height() - 24)
+        ov.setGeometry((cw.width() - ow) // 2, (cw.height() - oh) // 2, ow, oh)
+        ov.saved.connect(self._on_brain_saved)
+        ov.show()
+        ov.raise_()
+        self._brain_overlay = ov
+
+    def _on_brain_saved(self, needs_restart: bool):
+        ov = getattr(self, "_brain_overlay", None)
+        if ov is not None:
+            ov.hide()
+        self._refresh_listen_btn()
+        try:
+            from core import brain_config, face_id
+            if brain_config.get_senses().get("face_presence"):
+                face_id.presence().start(log=self._log_sig.emit)
+            else:
+                face_id.presence().stop()
+        except Exception as e:
+            self._log.append_log(f"ERR: Face presence — {e}")
+        if needs_restart:
+            self._log.append_log("SYS: Switching engines — restarting in a moment…")
+            from core import runtime
+            QTimer.singleShot(1200, runtime.restart_app)
+            return
+        self._log.append_log("SYS: Settings saved — applying.")
+        if self.on_brain_change:
+            threading.Thread(target=self.on_brain_change, daemon=True).start()
+
+    def _refresh_listen_btn(self):
+        if not hasattr(self, "_listen_btn"):
+            return
+        try:
+            from core import brain_config
+            mode = brain_config.get_senses().get("listen_mode", "active")
+        except Exception:
+            mode = "active"
+        self._listen_btn.setText("👂  LISTEN: AMBIENT (says name)" if mode == "ambient"
+                                 else "👂  LISTEN: ACTIVE")
+        self._listen_btn.setStyleSheet(self._BTN_PRI if mode == "ambient" else self._BTN_DIM)
+
+    def _toggle_listen_mode(self):
+        from core import brain_config
+        mode = brain_config.get_senses().get("listen_mode", "active")
+        new = "ambient" if mode == "active" else "active"
+        brain_config.save_senses({"listen_mode": new})
+        self._refresh_listen_btn()
+        name = self._assistant_name
+        self._log.append_log(
+            f"SYS: Ambient listening — I hear the room and answer when you say '{name}'."
+            if new == "ambient" else "SYS: Active listening — I answer everything I hear.")
 
 
 class _RootShim:
@@ -5646,6 +5719,14 @@ class JarvisUI:
     @on_audio_device_change.setter
     def on_audio_device_change(self, cb):
         self._win.on_audio_device_change = cb
+
+    @property
+    def on_brain_change(self):
+        return self._win.on_brain_change
+
+    @on_brain_change.setter
+    def on_brain_change(self, cb):
+        self._win.on_brain_change = cb
 
     def show_confirm(self, title: str, detail: str) -> None:
         """Thread-safe: raise the irreversible-action gate. Called from action
@@ -5782,9 +5863,10 @@ class JarvisUI:
         self._win._review_sig.emit(str(title or ""), str(summary or ""),
                                    list(findings or []), list(unclear or []))
 
-    def prompt_reconfig(self):
-        """Thread-safe: show the API key setup overlay (e.g. after an auth error)."""
+    def prompt_reconfig(self, message: str = ""):
+        """Thread-safe: show the setup overlay (e.g. after an auth error)."""
         self._win._ready = False
+        self._win._setup_message = message or "The API key was rejected — please enter a valid key."
         self._win._reconfig_sig.emit()
 
     def show_camera_frame(self, img_bytes: bytes):

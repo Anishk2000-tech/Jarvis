@@ -200,6 +200,14 @@ def _save_section(name: str, updates: dict) -> None:
 
 # ── brain ────────────────────────────────────────────────────────────────────
 
+def save_top(**fields) -> None:
+    """Write top-level config keys (gemini_api_key, os_system…)."""
+    with _lock:
+        data = _read()
+        data.update(fields)
+        _write(data)
+
+
 def get_brain() -> dict:
     b = _section("brain", _DEFAULT_BRAIN)
     p = str(b.get("provider") or "").strip().lower()
@@ -245,6 +253,51 @@ def save_brain(updates: dict) -> None:
 LEAN_HIDDEN = ("flight_finder", "game_updater", "youtube_video", "dev_agent", "code_helper",
                "manage_monitor", "mcp_servers", "skill_manager", "desktop_control",
                "file_processor", "telegram_notify", "hardware_control", "email")
+
+
+def detect_hardware() -> dict:
+    """RAM, NVIDIA VRAM and CPU cores — for model recommendations."""
+    out = {"ram_gb": 0.0, "vram_gb": 0.0, "gpu": "", "cores": 0}
+    try:
+        import psutil
+        out["ram_gb"] = round(psutil.virtual_memory().total / 2**30, 1)
+        out["cores"] = psutil.cpu_count(logical=False) or psutil.cpu_count() or 0
+    except Exception:
+        pass
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        h = pynvml.nvmlDeviceGetHandleByIndex(0)
+        out["vram_gb"] = round(pynvml.nvmlDeviceGetMemoryInfo(h).total / 2**30, 1)
+        name = pynvml.nvmlDeviceGetName(h)
+        out["gpu"] = name.decode() if isinstance(name, bytes) else str(name)
+    except Exception:
+        pass
+    return out
+
+
+def recommend(hw: dict | None = None) -> dict:
+    """Ollama models that suit this machine, with a sentence explaining why."""
+    hw = hw or detect_hardware()
+    ram, vram = hw.get("ram_gb") or 0, hw.get("vram_gb") or 0
+    if vram >= 10:
+        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:14b", "vision_model": "qwen2.5vl:7b",
+             "why": "Your GPU holds 7B models completely — fast and capable."}
+    elif vram >= 6:
+        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:3b",
+             "why": "A 7B model fits your GPU: good tool use at conversational speed."}
+    elif vram >= 3.5:
+        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:3b",
+             "why": (f"{vram:.0f} GB GPU + {ram:.0f} GB RAM: qwen2.5:7b splits between GPU and RAM — "
+                     "reliable with tools, a few seconds per reply. For the fastest replies pick "
+                     "qwen2.5:3b (runs fully on the GPU).")}
+    elif ram >= 15:
+        r = {"model": "qwen2.5:3b", "smart_model": "qwen2.5:7b", "vision_model": "moondream",
+             "why": "No usable GPU: a 3B model keeps voice replies quick on the CPU; 7B for long tasks."}
+    else:
+        r = {"model": "qwen2.5:1.5b", "smart_model": "qwen2.5:3b", "vision_model": "moondream",
+             "why": "Limited memory: small models only. A cloud brain (Groq, Gemini) will feel faster."}
+    return r
 
 
 def provider() -> str:

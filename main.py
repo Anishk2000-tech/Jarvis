@@ -639,6 +639,9 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
+        # ⚙ → AI BRAIN & VOICE saved: rebuild the session, keep the conversation.
+        self.ui.on_brain_change   = lambda: self.request_reconnect(
+            keep_context=True, reason="new settings")
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
 
