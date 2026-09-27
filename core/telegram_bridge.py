@@ -184,9 +184,12 @@ def _loop() -> None:
             backoff = min(60, backoff * 2)
 
 
-def start(log: Callable[[str], None] = print) -> None:
-    global _thread, _log
-    _log = log
+def start(log: Callable[[str], None] | None = None) -> None:
+    global _thread, _log, _pair_code
+    if log is not None:
+        _log = log
+    if not _cfg().get("owner_chat_id"):
+        _pair_code = ""          # a new token gets a fresh pairing code, shown again
     runtime.on_assistant_text(_on_assistant_text)
     if _thread is not None and _thread.is_alive():
         return

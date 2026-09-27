@@ -15,7 +15,8 @@ def telegram_notify(parameters: dict, player=None) -> str:
         if ":" not in token:
             return "That does not look like a bot token (it has the form 123456:ABC…)."
         telegram_bridge.save_cfg(bot_token=token, owner_chat_id="", enabled=True)
-        telegram_bridge.start()
+        from core import runtime
+        telegram_bridge.start(log=runtime.log)
         return "Telegram token saved. A pairing code will appear in the log in a few seconds."
     if action == "disable":
         telegram_bridge.save_cfg(enabled=False)

@@ -386,6 +386,13 @@ class BrainSettingsOverlay(QWidget):
 
     def _on_provider(self, *_a):
         p = self._provider()
+        prev = getattr(self, "_last_provider", None)
+        self._last_provider = p
+        if prev is not None and prev != p:
+            # A model name belongs to one provider; carry none across a switch.
+            for key in ("model", "smart_model", "vision_model"):
+                self._w[key].clear()
+                self._w[key].setCurrentText("")
         cloud_key = p in ("gemini_live", "openai", "anthropic", "gemini")
         self._rows["preset_row"].setVisible(p == "openai")
         self._rows["base_url_row"].setVisible(
@@ -604,7 +611,8 @@ class BrainSettingsOverlay(QWidget):
             tg = json.loads(brain_config.CONFIG_FILE.read_text(encoding="utf-8")).get("telegram", {}) or {}
             if token and token != tg.get("bot_token"):
                 telegram_bridge.save_cfg(bot_token=token, owner_chat_id="", enabled=True)
-                telegram_bridge.start()
+                from core import runtime
+                telegram_bridge.start(log=runtime.log)
             elif not token and tg.get("bot_token"):
                 telegram_bridge.save_cfg(bot_token="", enabled=False)
         except Exception:
