@@ -40,7 +40,8 @@ piper-tts
 kokoro-onnx
 playwright
 yt-dlp
-pynvml
+nvidia-ml-py
 youtube-transcript-api
 google-api-python-client
 google-auth-oauthlib
+setuptools>=70,<81

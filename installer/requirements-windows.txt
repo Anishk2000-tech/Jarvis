@@ -43,7 +43,7 @@ pdfplumber
 PyPDF2
 openpyxl
 pandas>=2,<3
-pynvml
+nvidia-ml-py
 
 # ── Remote dashboard ────────────────────────────────────────────────────────
 fastapi>=0.110,<1
@@ -65,6 +65,9 @@ google-auth-oauthlib
 youtube-transcript-api
 
 # ── Windows integration ─────────────────────────────────────────────────────
+# win10toast (reminder pop-ups) imports pkg_resources, which setuptools stopped
+# shipping in version 81 — found by the self-test on a real Windows runner.
+setuptools>=70,<81
 comtypes
 pycaw
 win10toast

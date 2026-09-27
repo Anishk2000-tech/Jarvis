@@ -49,7 +49,7 @@ def main() -> int:
             "rapidocr_onnxruntime", "playwright.async_api", "google.genai", "fastapi", "uvicorn",
             "cryptography", "pyautogui", "pyperclip", "mss", "PIL", "psutil", "requests", "bs4", "ddgs",
             "yt_dlp", "docx", "pptx", "pdfplumber", "PyPDF2", "openpyxl", "pandas", "tinytuya",
-            "paho.mqtt.client", "kasa", "zeroconf", "serial", "qrcode", "send2trash", "pynvml",
+            "paho.mqtt.client", "kasa", "zeroconf", "serial", "qrcode", "send2trash", "pynvml", "pkg_resources",
             "youtube_transcript_api", "googleapiclient.discovery"]
     if is_win:
         mods += ["win32com.client", "win32gui", "pythoncom", "pywinauto", "pycaw.pycaw", "comtypes", "wmi",
