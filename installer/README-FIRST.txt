@@ -58,6 +58,9 @@ JARVIS — QUICK START
    Move the mouse hard into a screen corner to stop the computer agent.
 
 6. IF SOMETHING DOESN'T WORK
+   * It doesn't hear you / face ID sees nothing: Windows Settings → Privacy →
+     Microphone (and Camera) → turn on "Allow desktop apps to access your
+     microphone/camera". Pick the right microphone in ⚙ SETUP → AUDIO DEVICES.
    * Start menu → JARVIS → "JARVIS self-test" checks every component.
    * Start menu → "JARVIS (with log console)" shows the live log.
    * The log file is  app\logs\jarvis.log  in the install folder.

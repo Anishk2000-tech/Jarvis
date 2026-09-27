@@ -531,9 +531,23 @@ class LocalEngineMixin:
             pass
 
     def _vad_worker(self) -> None:
+        zero_since = None
+        warned = False
         while True:
             try:
                 block, speaking = self._mic_q.get()
+                # Exact digital silence for a long stretch is not a quiet room —
+                # it is Windows withholding the microphone (privacy setting) or
+                # a muted/disabled input device.
+                if not np.any(block):
+                    zero_since = zero_since or time.monotonic()
+                    if not warned and time.monotonic() - zero_since > 15:
+                        warned = True
+                        self._log_async(
+                            "ERR: The microphone delivers pure silence. On Windows: Settings → Privacy → "
+                            "Microphone → allow desktop apps; also check ⚙ SETUP → AUDIO DEVICES.")
+                else:
+                    zero_since = None
                 seg = self._segmenter
                 if seg is None:
                     continue
