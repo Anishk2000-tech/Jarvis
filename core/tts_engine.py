@@ -204,17 +204,42 @@ class SapiTTS(_Engine):
         return v
 
     def synth(self, text: str, lang: str = "") -> Iterator[np.ndarray]:
+        import os
+        import tempfile
+        import wave
         import win32com.client
         voice = self._voice()
-        stream = win32com.client.Dispatch("SAPI.SpMemoryStream")
-        fmt = win32com.client.Dispatch("SAPI.SpAudioFormat")
-        fmt.Type = 26                     # SAFT24kHz16BitMono
-        stream.Format = fmt
-        voice.AudioOutputStream = stream
-        voice.Speak(text, 0)
-        data = bytes(stream.GetData())
-        voice.AudioOutputStream = None
-        yield np.frombuffer(data, dtype=np.int16).copy()
+        fd, path = tempfile.mkstemp(suffix=".wav", prefix="jarvis_tts_")
+        os.close(fd)
+        try:
+            stream = win32com.client.Dispatch("SAPI.SpFileStream")
+            try:
+                fmt = win32com.client.Dispatch("SAPI.SpAudioFormat")
+                fmt.Type = 26                     # SAFT24kHz16BitMono
+                stream.Format = fmt
+            except Exception:
+                pass                              # the default format is read back below
+            stream.Open(path, 3, False)           # SSFMCreateForWrite
+            voice.AudioOutputStream = stream
+            voice.Speak(text, 0)                  # synchronous
+            stream.Close()
+            with wave.open(path, "rb") as w:
+                sr, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
+                raw = w.readframes(w.getnframes())
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        if width == 2:
+            pcm = np.frombuffer(raw, dtype=np.int16)
+        elif width == 1:
+            pcm = ((np.frombuffer(raw, dtype=np.uint8).astype(np.int16) - 128) << 8).astype(np.int16)
+        else:
+            raise RuntimeError(f"unexpected SAPI sample width {width}")
+        if ch > 1:
+            pcm = pcm.reshape(-1, ch).mean(axis=1).astype(np.int16)
+        yield resample(pcm.copy(), sr, SR)
 
     @staticmethod
     def list_voices() -> list[str]:

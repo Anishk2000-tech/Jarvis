@@ -172,6 +172,8 @@ class LocalEngineMixin:
         self._pull_started: set[str] = set()
         self._stt_wait_note = 0.0
         self._brain_retry = False
+        self._pulling = ""
+        self._pull_pct = 0
         self._asst_name = brain_config.assistant_name()
         runtime.set_engine(self)
 
@@ -350,10 +352,16 @@ class LocalEngineMixin:
 
             def prog(status, frac):
                 pct = int(frac * 100)
+                if frac:
+                    self._pull_pct = pct
                 if pct >= last[0] + 10 or status == "success":
                     last[0] = pct
                     self._log_async(f"SYS: Model download {status} {pct}%")
-            ok, msg = llm.ollama_pull(s.model, progress=prog, s=s)
+            self._pulling = s.model
+            try:
+                ok, msg = llm.ollama_pull(s.model, progress=prog, s=s)
+            finally:
+                self._pulling = ""
             if ok:
                 self._log_async(f"SYS: '{s.model}' downloaded.")
                 ok, msg = llm.ping(s)
@@ -861,6 +869,11 @@ class LocalEngineMixin:
         """One request, possibly many tool rounds. Runs in a worker thread."""
         b = brain_config.get_brain()
         s = llm.settings_for("chat")
+        if self._pulling and self._pulling == s.model:
+            msg = (f"I'm still downloading my brain model — about {self._pull_pct} percent done. "
+                   "Give me a few more minutes.")
+            self._speak(msg, tid)
+            return msg
         decls = self._all_tool_decls()
         params_by_name = {d.get("name"): d.get("parameters") for d in decls}
         now = datetime.now().strftime("%H:%M")
