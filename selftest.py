@@ -124,6 +124,46 @@ def main() -> int:
         eng.detect(np.zeros((240, 320, 3), dtype=np.uint8))
         return "YuNet + SFace ready"
 
+    @check("LLM streaming + tool call (local fake Ollama)")
+    def _():
+        import json as _json
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from core import llm
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(n)
+                if self.path == "/api/show":
+                    body = _json.dumps({"capabilities": ["completion", "tools"]}).encode()
+                else:
+                    lines = [{"message": {"content": "Opening it. "}, "done": False},
+                             {"message": {"content": "", "tool_calls": [{"function": {
+                                 "name": "open_app", "arguments": {"app_name": "notepad"}}}]}, "done": False},
+                             {"message": {"content": ""}, "done": True}]
+                    body = "\n".join(_json.dumps(x) for x in lines).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            s = llm.Settings(provider="ollama", base_url=f"http://127.0.0.1:{srv.server_address[1]}",
+                             model="selftest")
+            decl = [{"name": "open_app", "description": "Open an app", "parameters": {
+                "type": "OBJECT", "properties": {"app_name": {"type": "STRING"}}}}]
+            ev = llm.chat([{"role": "user", "content": "open notepad"}], decl, s=s)
+            assert ev.tool_calls and ev.tool_calls[0].arguments == {"app_name": "notepad"}, ev
+            return "tool call parsed"
+        finally:
+            srv.shutdown()
+
     @check("brain config")
     def _():
         from core import brain_config
