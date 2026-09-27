@@ -48,3 +48,14 @@ desktop.ini
 logs/
 downloads/
 screenshots/
+
+# ── Added by the multi-brain fork ─────────────────────────────────────────────
+memory/journal/               # local transcript of what the microphone heard
+memory/schedule.json          # scheduled assistant tasks
+memory/faces/                 # face-ID embeddings of the owner
+memory/smart_home.json        # smart-home device registry (may hold local keys)
+config/mcp_servers.json       # MCP servers can carry tokens
+models/                       # downloaded speech / voice / face models
+installer/build/
+installer/dist/
+.pytest_cache/

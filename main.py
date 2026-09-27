@@ -34,6 +34,11 @@ for _stream in ("stdout", "stderr"):
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+# `import main` from another module must get THIS running module, not a second
+# copy executed from disk — core.gemini reads LIVE_MODEL from it and the local
+# engine reuses helpers defined here.
+_sys.modules.setdefault("main", _sys.modules[__name__])
+
 import asyncio
 import re
 import threading
@@ -497,6 +502,59 @@ TOOL_DECLARATIONS = [
     },
 ]
 
+# ── Hooks into the extensions added by this fork ────────────────────────────
+# Each is imported lazily and fails soft: a missing optional package disables
+# one feature, never the assistant.
+
+def _mcp_declarations() -> list:
+    try:
+        from core import mcp_client
+        return mcp_client.manager().gemini_declarations()
+    except Exception:
+        return []
+
+
+def _mcp_has(name: str) -> bool:
+    try:
+        from core import mcp_client
+        return mcp_client.manager().has(name)
+    except Exception:
+        return False
+
+
+def _journal_append(speaker: str, text: str, addressed) -> None:
+    try:
+        from core import journal
+        journal.append(speaker, text, addressed)
+    except Exception:
+        pass
+
+
+def _emit_assistant_text(text: str) -> None:
+    try:
+        from core import runtime
+        runtime.emit_assistant_text(text)
+    except Exception:
+        pass
+
+
+def _start_mcp(engine) -> None:
+    from core import mcp_client
+    mcp_client.manager().start_async(log=engine.ui.write_log)
+
+
+def _start_telegram(engine) -> None:
+    from core import telegram_bridge
+    telegram_bridge.start(log=engine.ui.write_log)
+
+
+def _start_face_presence(engine) -> None:
+    from core import brain_config
+    if brain_config.get_senses().get("face_presence"):
+        from core import face_id
+        face_id.presence().start(log=engine.ui.write_log)
+
+
 class _ReconnectSignal(Exception):
     """Raised inside the session TaskGroup to force a clean, voluntary reconnect
     (e.g. the user picked a new voice — the voice is fixed at connect time, so
@@ -659,6 +717,12 @@ class JarvisLive:
         self.ui.on_wake_toggle   = self._ui_wake_toggle   # (enable: bool) -> str
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
+
+        # The switchboard the scheduler, Telegram bridge, face presence and
+        # skill manager use to reach whichever engine is running.
+        from core import runtime as _runtime
+        _runtime.set_engine(self)
+        self.engine_kind = getattr(self, "engine_kind", "gemini_live")
 
     # ── Wake word: state machine ─────────────────────────────────────────────
 
@@ -1007,7 +1071,8 @@ class JarvisLive:
         # and this follows without anyone editing a prompt.
         _all_decls = (TOOL_DECLARATIONS
                       + self._action_registry.get_tool_declarations()
-                      + self._plugin_registry.get_tool_declarations())
+                      + self._plugin_registry.get_tool_declarations()
+                      + _mcp_declarations())
         _names = {(d.get("name") if isinstance(d, dict) else getattr(d, "name", ""))
                   for d in _all_decls}
         sys_prompt = _render_prompt(sys_prompt, {
@@ -1263,6 +1328,10 @@ class JarvisLive:
                         lambda: self._plugin_registry.run(name, args, player=self.ui, session_memory=None)
                     )
                     result = r or "Done."
+                elif _mcp_has(name):
+                    from core import mcp_client
+                    result = await loop.run_in_executor(
+                        None, lambda: mcp_client.manager().call(name, args))
                 else:
                     result = f"Unknown tool: {name}"
 
@@ -1543,10 +1612,13 @@ class JarvisLive:
                                 continue
 
                             full_in = " ".join(in_buf).strip()
+                            if full_in and self._voice_confirm_check(full_in):
+                                full_in = ""
                             if full_in:
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+                                _journal_append("user", full_in, True)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
@@ -1566,6 +1638,8 @@ class JarvisLive:
                                 self._last_out_logged = full_out
                                 self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
+                                _journal_append(self._asst_name, full_out, None)
+                                _emit_assistant_text(full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "jarvis",
@@ -2058,7 +2132,14 @@ class JarvisLive:
     async def run(self):
         self._loop = asyncio.get_event_loop()
         self._reconnect_event = asyncio.Event()
+        await self._start_services()
+        await self._connect_loop()
 
+    async def _start_services(self):
+        """Everything that is shared by both engines and lives for the whole
+        process: the confirmation gate, audio device enumeration, the phone
+        dashboard, and the long-running helpers added in this fork (MCP servers,
+        the Telegram bridge, face presence)."""
         # ── Wire the shared core services to the interface ───────────────────
         # The confirmation gate is useless without a way to ask, and a memory
         # trim is invisible without a way to say so. Both are bound once here
@@ -2091,6 +2172,62 @@ class JarvisLive:
             print(f"[Dashboard] Disabled: {e}")
             self._dashboard = None
 
+        # ── Extensions added by this fork: each is optional and off-thread ──
+        for _name, _starter in (("MCP", _start_mcp), ("Telegram", _start_telegram),
+                                ("Face presence", _start_face_presence)):
+            try:
+                _starter(self)
+            except Exception as _e:
+                print(f"[{_name}] not started: {_e}")
+
+    async def _run_scheduler(self) -> None:
+        """Fire scheduled assistant tasks ("every morning at 8, read me my
+        calendar") while the app is running. Jobs live in memory/schedule.json
+        and are managed by the scheduled_tasks tool."""
+        from core import scheduler
+        while True:
+            await asyncio.sleep(20)
+            try:
+                due = await asyncio.to_thread(scheduler.due_jobs)
+            except Exception as e:
+                print(f"[Scheduler] {e}")
+                continue
+            for job in due:
+                if not self.session:
+                    break
+                prompt = (f"[SCHEDULED_TASK] The user scheduled this task earlier: "
+                          f"\"{job['task']}\". Do it now, using your tools as needed, and "
+                          f"tell the user briefly what you did.")
+                self.ui.write_log(f"SYS: Scheduled task — {job['task'][:80]}")
+                try:
+                    if self._wake_enabled and not self._awake:
+                        self.wake(reason="scheduled task")
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": prompt}]},
+                        turn_complete=True)
+                except Exception as e:
+                    print(f"[Scheduler] send failed: {e}")
+                await asyncio.sleep(5)
+
+    def _voice_confirm_check(self, heard: str) -> bool:
+        """A spoken 'confirm' / 'cancel' answers the on-screen gate. Decided by
+        the words the microphone heard, never by the model. True if consumed."""
+        try:
+            from core import attention, brain_config
+            if not brain_config.get_senses().get("voice_confirm", True):
+                return False
+            if not confirm_gate.pending_title():
+                return False
+            ans = attention.confirm_answer(heard)
+            if ans is None:
+                return False
+            self.ui.write_log(f"You: {heard}")
+            confirm_gate.resolve(ans)
+            return True
+        except Exception:
+            return False
+
+    async def _connect_loop(self):
         while True:
             try:
                 print("[JARVIS] Connecting...")
@@ -2163,6 +2300,7 @@ class JarvisLive:
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    tg.create_task(self._run_scheduler())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
@@ -2309,11 +2447,24 @@ def main():
 
     def runner():
         ui.wait_for_api_key()
-        jarvis = JarvisLive(ui)
+        from core import brain_config
+        brain_config.ensure_os_field()
+        if brain_config.uses_local_engine():
+            from core.local_engine import LocalEngineMixin
+
+            class LocalJarvis(LocalEngineMixin, JarvisLive):
+                INLINE_TOOLS = TOOL_DECLARATIONS
+
+            jarvis = LocalJarvis(ui)
+        else:
+            jarvis = JarvisLive(ui)
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
             print("\n🔴 Shutting down...")
+        except Exception as e:
+            traceback.print_exc()
+            ui.write_log(f"ERR: The assistant stopped — {type(e).__name__}: {str(e)[:200]}")
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
