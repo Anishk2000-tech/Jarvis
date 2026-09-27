@@ -420,7 +420,8 @@ class BrainSettingsOverlay(QWidget):
             "gemini": "Gemini text models with this app's own speech pipeline (free tier available).",
         }
         extra = f"\nRecommended here: {self._rec.get('why', '')}" if p == "ollama" and self._rec else ""
-        self._hint.setText(hints.get(p, "") + extra)
+        hw = f"\n{self._hw_line}" if getattr(self, "_hw_line", "") else ""
+        self._hint.setText(hints.get(p, "") + extra + hw)
 
     def _apply_preset(self):
         url = self._w["preset"].currentData()
@@ -544,7 +545,7 @@ class BrainSettingsOverlay(QWidget):
 
     def _on_status(self, which: str, text: str, ok: bool):
         if which == "hw":
-            self._hint.setText((self._hint.text() + "\n" + text).strip())
+            self._hw_line = text
             self._on_provider()
             return
         lbl = self._status.get(which)
