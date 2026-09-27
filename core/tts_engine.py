@@ -204,7 +204,6 @@ class SapiTTS(_Engine):
         return v
 
     def synth(self, text: str, lang: str = "") -> Iterator[np.ndarray]:
-        import os
         import tempfile
         import wave
         import win32com.client
