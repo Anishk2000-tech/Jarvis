@@ -11,7 +11,7 @@
 
 Unicode true
 !ifndef VERSION
-  !define VERSION "56.0.0"
+  !define VERSION "57.0.0"
 !endif
 !ifndef STAGE
   !define STAGE "build\stage"

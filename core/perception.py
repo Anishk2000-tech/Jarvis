@@ -166,7 +166,12 @@ class Perception:
     def start(self, log: Callable[[str], None] = print) -> None:
         self._log = log
         if self.running():
-            return
+            if not self._stop.is_set():
+                return
+            self._thread.join(timeout=3)           # switched off a moment ago: let it finish
+            if self.running():
+                self._stop.clear()
+                return
         self._stop.clear()
         self._started_at = time.monotonic()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="live-vision")
@@ -224,6 +229,7 @@ class Perception:
         cam.acquire()
         self._log("SYS: 👁 Live vision on — I can see through the webcam.")
         tick = 0
+        last_retry = 0.0
         try:
             if cam.wait_frame(timeout=8.0) is None:
                 self.error = cam.error or "no camera image"
@@ -240,7 +246,8 @@ class Perception:
                     except Exception as e:
                         print(f"[Vision] {type(e).__name__}: {e}")
                     tick += 1
-                elif not cam.active:
+                elif not cam.active and time.monotonic() - last_retry > 10:
+                    last_retry = time.monotonic()        # the camera dropped: reopen it
                     cam.acquire()
                     cam.release()
                 self._stop.wait(max(0.05, 1.0 / fps - (time.monotonic() - t0)))
@@ -267,11 +274,9 @@ class Perception:
         seen_faces = []
         if faces is not None and (tick % 2 == 0 or any(d["label"] == "person" for d in dets)):
             try:
-                if faces.people:
-                    seen_faces = faces.identify(small)
-                else:
-                    seen_faces = [{"name": "unknown", "box": tuple(int(v) for v in r[:4]), "score": 0.0}
-                                  for r in faces.detect(small)]
+                # With nobody enrolled there is no one to recognise — and no
+                # one to call a stranger either.
+                seen_faces = faces.identify(small) if faces.people else []
                 for f in seen_faces:
                     x, y, bw, bh = f["box"]
                     f["box"] = (int(x * scale), int(y * scale), int(bw * scale), int(bh * scale))
@@ -341,7 +346,7 @@ class Perception:
         for name in set(people) - set(prev_people):
             if name == "unknown":
                 continue
-            away = now - self._last_seen.get(name, 0.0)
+            away = now - self._last_seen.get(name, -1e9)
             self._last_seen[name] = now
             if away > 300:
                 notes.append(f"{name} arrived")

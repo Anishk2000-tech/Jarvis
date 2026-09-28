@@ -228,6 +228,8 @@ class LocalEngineMixin:
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
+        if self._busy and getattr(self, "_turn_source", "") == "vision":
+            self.interrupt()
         if self._wake_enabled and not self._awake:
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
             return
@@ -694,6 +696,8 @@ class LocalEngineMixin:
         if self._wake_enabled and not self._awake:
             return
         self._last_user_speech = time.monotonic()
+        if self._busy and getattr(self, "_turn_source", "") == "vision":
+            self.interrupt()            # a remark about the camera yields to the user
         clean = attention.strip_name(text, name) if (mode == "ambient" and named) else text
         self.ui.write_log(f"You: {text}")
         self._session_log.append(f"User: {text}")
@@ -747,19 +751,38 @@ class LocalEngineMixin:
         except Exception:
             pass
         parts.append(body)
-        learned = knowledge.context_block(query) if query else knowledge.context_block("", k=0)
+        # Only what changes rarely belongs here: the system prompt is the start
+        # of the prompt, and a local server reuses its cache of the whole
+        # conversation only while that start stays the same. What changes every
+        # turn (what the camera sees, facts relevant to this question) goes
+        # into the user's message instead — see _turn_context.
+        learned = knowledge.context_block("", k=0)
         if learned:
             parts.append(learned)
+        if self._earlier:
+            parts.append("[EARLIER IN THIS CONVERSATION]\n" + self._earlier)
+        return "\n\n".join(parts)
+
+    def _turn_context(self, query: str) -> str:
+        """Per-turn context for the user's message: learned facts relevant to
+        this request, and what the webcam sees right now."""
+        bits = []
+        try:
+            core_ids = {f["id"] for f in knowledge.store().core_facts(4)}
+            hits = [f for f in knowledge.store().search(query, k=6) if f["id"] not in core_ids] if query else []
+            if hits and brain_config.get_learning_cfg().get("enabled", True):
+                bits.append("[THINGS YOU HAVE LEARNED that may matter here]\n"
+                            + "\n".join(f"- {f['text']}" for f in hits))
+        except Exception:
+            pass
         try:
             from core import perception
             seen = perception.perception().context_block()
             if seen:
-                parts.append(seen)
+                bits.append(seen)
         except Exception:
             pass
-        if self._earlier:
-            parts.append("[EARLIER IN THIS CONVERSATION]\n" + self._earlier)
-        return "\n\n".join(parts)
+        return "\n\n".join(bits)
 
     def _trim_history(self, num_ctx: int) -> None:
         budget = int(num_ctx * 1.3)
@@ -847,10 +870,15 @@ class LocalEngineMixin:
 
     async def _brain_loop(self):
         while True:
-            req = await self._req_q.get()
-            # Several things said in a row while we were busy become one request.
+            pending = [await self._req_q.get()]
             while not self._req_q.empty():
-                nxt = self._req_q.get_nowait()
+                pending.append(self._req_q.get_nowait())
+            # Something the user said makes a queued remark about the camera moot.
+            if any(r.source in ("voice", "typed") for r in pending):
+                pending = [r for r in pending if r.source != "vision"]
+            req = pending.pop(0)
+            # Several things said in a row while we were busy become one request.
+            for nxt in pending:
                 if nxt.source in ("voice", "typed") and req.source in ("voice", "typed") and not nxt.images:
                     req.text = f"{req.text} {nxt.text}".strip()
                 else:
@@ -864,6 +892,7 @@ class LocalEngineMixin:
         if req.source == "vision" and (time.monotonic() - req.ts > 20 or self._is_speaking):
             return                      # a stale sight is not worth remarking on
         self._busy = True
+        self._turn_source = req.source
         self._cancel.clear()
         self._turn_id += 1
         tid = self._turn_id
@@ -929,6 +958,9 @@ class LocalEngineMixin:
         spoken_all: list[str] = []
         from_user = req.source in ("voice", "typed", "remote")
         content = f"{req.text}\n\n(time now {now})" if from_user else req.text
+        ctx = self._turn_context(req.text if from_user else "")
+        if ctx:
+            content += "\n\n" + ctx
         images = list(req.images)
         search_cfg = brain_config.get_search_cfg()
         auto_search = bool(search_cfg.get("auto_search", True)) and from_user
@@ -966,7 +998,7 @@ class LocalEngineMixin:
             if tid != self._turn_id or self._cancel.is_set():
                 return " ".join(spoken_all)
             with self._hist_lock:
-                msgs = [{"role": "system", "content": self._system_prompt(req.text)}] + list(self._history)
+                msgs = [{"role": "system", "content": self._system_prompt()}] + list(self._history)
             stream = SpeechStream()
             final_ev = None
             unsure = False
@@ -1143,7 +1175,7 @@ class LocalEngineMixin:
         msg: dict = {"role": "user", "content": content}
         if images:
             msg["images"] = images
-        msgs = [{"role": "system", "content": self._system_prompt(req.text)}] + \
+        msgs = [{"role": "system", "content": self._system_prompt()}] + \
             [{"role": m["role"], "content": str(m.get("content", ""))} for m in recent] + [msg]
         try:
             ev = llm.chat(msgs, None, s=s, cancel=self._cancel, max_tokens=90)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import sys
 import time
 import traceback
@@ -164,6 +165,84 @@ def main() -> int:
         finally:
             srv.shutdown()
 
+    @check("object detection (live vision / CCTV)", critical=False)
+    def _():
+        import numpy as np
+        from core import vision_detect
+        assert vision_detect.model_path().exists(), "not bundled — it downloads on first use"
+        det = vision_detect.Detector(log=lambda m: None)
+        img = np.zeros((360, 640, 3), np.uint8)
+        t0 = time.monotonic()
+        det.detect(img)
+        return f"NanoDet ready, {(time.monotonic() - t0) * 1000:.0f} ms per frame"
+
+    @check("video decoding for IP cameras (FFmpeg)")
+    def _():
+        import threading
+        import cv2
+        import numpy as np
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        info = cv2.getBuildInformation()
+        assert re.search(r"FFMPEG:\s+YES", info), "OpenCV was built without FFmpeg"
+        jpg = cv2.imencode(".jpg", np.full((120, 160, 3), 90, np.uint8))[1].tobytes()
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=f")
+                self.end_headers()
+                try:
+                    for _ in range(100):
+                        self.wfile.write(b"--f\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                         + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                        time.sleep(0.05)
+                except Exception:
+                    pass
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            from core import cctv
+            frame = cctv.grab_once(f"http://127.0.0.1:{srv.server_address[1]}/video.mjpg", timeout=10)
+            assert frame is not None and frame.shape[:2] == (120, 160), "no frame from a local MJPEG stream"
+        finally:
+            srv.shutdown()
+        return "FFmpeg reads network video"
+
+    @check("voice volume boost")
+    def _():
+        import numpy as np
+        from core import audio_fx
+        t = np.arange(24000) / 24000
+        x = (np.sin(2 * np.pi * 200 * t) * np.clip(np.sin(2 * np.pi * 3 * t), 0, 1) * 30000).astype(np.int16)
+        y = audio_fx.apply_gain(x, 200)
+        assert y.dtype == np.int16 and np.abs(y.astype(np.int32)).max() < 32767
+        return "0-200 % with limiter"
+
+    @check("web research (offline parse)")
+    def _():
+        from core import websearch
+        text = websearch.html_to_text("<html><body><nav>menu</nav><article><p>The Eiffel Tower is 330 metres "
+                                      "tall, measured in 2022 after a new antenna.</p></article></body></html>")
+        best = websearch.best_passages("how tall is the eiffel tower", [("x", text)])
+        assert best and "330" in best[0][1], best
+        assert websearch.needs_fresh_info("What is the price of gold today?")
+        return "page reading + ranking"
+
+    @check("learning memory")
+    def _():
+        import tempfile
+        from pathlib import Path as _P
+        from core import knowledge
+        with tempfile.TemporaryDirectory() as d:
+            st = knowledge.KnowledgeStore(_P(d) / "k.jsonl")
+            st.add("The owner's sister Priya visits on Sundays", "person")
+            st.save()
+            assert st.search("when does priya visit")
+        return "store + recall"
+
     @check("brain config")
     def _():
         from core import brain_config
@@ -176,13 +255,16 @@ def main() -> int:
         from PyQt6.QtWidgets import QApplication
         import ui
         from ui_brain import BrainSettingsOverlay
+        from ui_cctv import CameraWallOverlay
         app = QApplication.instance() or QApplication(sys.argv)
         win = ui.MainWindow("face.png")
         ov = BrainSettingsOverlay(win.centralWidget(), first_run=True)
         ov.show()
+        wall = CameraWallOverlay(win.centralWidget())
+        wall.show()
         app.processEvents()
         win.close()
-        return "main window + settings"
+        return "main window + settings + camera wall"
 
     if is_win:
         @check("PowerShell tool")

@@ -49,12 +49,15 @@ DIST = HERE / "dist"
 PY_VERSION = "3.12.10"
 NUGET_URL = f"https://api.nuget.org/v3-flatcontainer/python/{PY_VERSION}/python.{PY_VERSION}.nupkg"
 
-APP_FILES = ["main.py", "ui.py", "ui_brain.py", "selftest.py", "readme.md", "LICENSE", "requirements.txt"]
+APP_FILES = ["main.py", "ui.py", "ui_brain.py", "ui_cctv.py", "selftest.py", "readme.md", "LICENSE",
+             "requirements.txt"]
 APP_DIRS = ["core", "actions", "plugins", "memory", "config", "dashboard", "firmware"]
 EXCLUDE_NAMES = {"__pycache__", "api_keys.json", "api_keys.json.tmp", "long_term.json", "schedule.json",
                  "smart_home.json", "hardware.json", "routines.json", "journal", "faces", "certs",
-                 "whatsapp_web", "mcp_servers.json", "tuya_devices.json", "logs", "uploads"}
+                 "whatsapp_web", "mcp_servers.json", "tuya_devices.json", "logs", "uploads",
+                 "knowledge.jsonl", "knowledge_state.json", "knowledge_emb.npz", "cctv.json", "cctv_events"}
 FACE_MODELS = ["face_detection_yunet_2023mar.onnx", "face_recognition_sface_2021dec.onnx"]
+DETECT_MODEL = "object_detection_nanodet_2022nov.onnx"      # live vision + CCTV (Apache-2.0)
 
 
 def log(msg: str) -> None:
@@ -195,6 +198,25 @@ def stage_app() -> Path:
                 log(f"face model mirror failed: {e}")
         if not (faces / name).exists():
             log(f"WARNING: {name} not bundled; it will download on first use")
+    # Object detection for live vision and CCTV.
+    vision = app / "models" / "vision"
+    vision.mkdir(parents=True, exist_ok=True)
+    local = ROOT / "models" / "vision" / DETECT_MODEL
+    if local.exists():
+        shutil.copy2(local, vision / DETECT_MODEL)
+    else:
+        for url in ("https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/"
+                    f"object_detection_nanodet/{DETECT_MODEL}",
+                    f"https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_nanodet/{DETECT_MODEL}"):
+            try:
+                fetch(url, vision / DETECT_MODEL)
+                if (vision / DETECT_MODEL).stat().st_size > 1_000_000:
+                    break
+                (vision / DETECT_MODEL).unlink()
+            except Exception as e:
+                log(f"detector model mirror failed: {e}")
+    if not (vision / DETECT_MODEL).exists():
+        log(f"WARNING: {DETECT_MODEL} not bundled; it will download on first use")
     return app
 
 

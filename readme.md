@@ -1,4 +1,4 @@
-# ⚙️ MARK LVI — JARVIS on any brain
+# ⚙️ MARK LVII — JARVIS on any brain
 ### Voice assistant for Windows 10/11 · local models (Ollama, LM Studio) or cloud (Gemini Live, OpenAI-compatible, Claude) · one-click installer, no Docker
 
 > Based on **MARK LV** by [FatihMakes](https://www.youtube.com/@FatihMakes) (CC BY-NC 4.0). Everything from Mark LV is still here — the holographic face, lip-sync, memory, undo, confirmation gate, phone dashboard, plugins — and Gemini Live is still the default realtime voice. This release adds a second, fully local engine and a large set of new abilities.
@@ -30,12 +30,22 @@ Build it yourself (Linux or Windows): `pip install uv && python installer/build_
 
 | Role | Model | Why |
 |---|---|---|
-| Conversation | `qwen2.5:7b` | Reliable tool use; splits between GPU and RAM (a few seconds per reply) |
-| Fastest replies | `qwen2.5:3b` or `llama3.2:3b` | Fits entirely in 4 GB VRAM |
-| Vision (screen/camera) | `qwen2.5vl:3b` or `gemma3:4b` | Sees screenshots and the webcam |
+| Everything, incl. live vision | `gemma4:e4b` | Talks, **sees** and calls tools in one model — live vision and CCTV never make the 4 GB GPU swap models. Splits between GPU and RAM |
+| Most dependable tool use | `qwen2.5:7b` (+ `qwen2.5vl:3b` as vision model) | Two models; the vision one runs on the CPU for background looks so the GPU keeps the chat model |
+| Fastest replies | `qwen2.5:3b` or `gemma4:e2b` | Fit (almost) entirely in 4 GB VRAM |
 | Heavy agent tasks | `qwen2.5:14b` | Runs from system RAM — slow but capable |
 
 The settings screen detects your RAM/GPU and suggests models; small models automatically get a "lean" tool set and a 16k context.
+
+## 🆕 New in Mark LVII
+
+| Ability | How |
+|---|---|
+| 👁️ Live vision | ⚙ CONTROLS → **LIVE VISION**. The webcam stays on: people, faces and 80 kinds of objects are recognised on the CPU (NanoDet + YuNet/SFace, ~5 % CPU), the vision model describes the scene when it changes, and what it sees is in every conversation ("what am I holding?" gets the live frame). It greets people it knows, asks a stranger who they are, and — at the *normal*/*chatty* levels — remarks on what it sees on its own. With Gemini Live the webcam is streamed as video. |
+| 📹 CCTV | ⚙ CONTROLS → **CCTV CAMERAS**, or say "add my Tapo camera at 192.168.1.40 as Front Door". RTSP/ONVIF (auto-discovery), MJPEG, snapshots, Home Assistant cameras; templates for Hikvision, Dahua, CP Plus, Imou, Tapo, EZVIZ, Reolink, Uniview, Axis, Foscam, ESP32-CAM, Android IP Webcam. Motion-gated person/vehicle/animal detection with face recognition, snapshots saved per day, **home** mode announces visitors by voice, **night/away** send Telegram photos. "What happened while I was out?" |
+| 🔎 Looks things up | Time-sensitive questions (news, prices, scores, "who is the current…") are searched *before* answering; an answer that admits not knowing is replaced by one from the web. Several engines at once, top pages read and cut to the relevant passages, Google's AI answer via Gemini + Google Search (free key), optional Tavily / Brave / Serper / SearXNG. |
+| 🧠 Learns by itself | While idle it distils what it saw, heard, which apps you used and which of its actions worked into lasting facts (`memory/knowledge.jsonl`), and recalls the relevant ones in every conversation. "What have you learned about me?", "forget that". |
+| 🔊 Voice up to 200 % | Like VLC's boost: a limiter keeps it clean. Slider in ⚙ CONTROLS, or "speak louder" / "set your volume to 180". "Volume 150%" puts Windows at 100 % and boosts the voice. |
 
 ## 🚀 What's new in Mark LVI
 
@@ -64,6 +74,10 @@ The settings screen detects your RAM/GPU and suggests models; small models autom
 * Face ID is identification, not security: there is no liveness check, so a photo can fool it.
 * Ambient listening records and transcribes conversations near the PC (stored only on this PC, deleted after 30 days by default). Let the people around you know, and check the rules where you live.
 * Smart-home control needs each ecosystem's own account/token (or Home Assistant) — devices are not reachable without one.
+* Live vision keeps the webcam light on. Proactive remarks depend on the model: a 4B model is sometimes chatty or misreads a scene; the "low" level only greets and flags strangers.
+* CCTV needs cameras that expose RTSP, ONVIF, MJPEG or snapshots (most do; some cloud-only cameras only through Home Assistant). Use sub-streams: decoding many 4K streams costs CPU.
+* Web answers are only as good as the pages found; Google's own AI answer needs a Gemini API key (free tier, limited daily quota).
+* The volume boost applies to the assistant's voice, not to other apps (Windows itself stops at 100 %).
 
 ## 🗂️ New files
 
@@ -74,9 +88,13 @@ core/local_engine.py   the local voice engine (mixes into JarvisLive)
 core/vad.py stt_engine.py tts_engine.py speech_text.py attention.py journal.py
 core/screen_reader.py  UI Automation + OCR screen model      core/camera.py  shared webcam
 core/face_id.py        YuNet/SFace face recognition + presence
+core/perception.py     live vision        core/vision_detect.py  NanoDet object detection
+core/cctv.py           IP cameras, ONVIF, events, alerts        ui_cctv.py  camera wall
+core/websearch.py      search → read pages → passages           core/knowledge.py  self-learning
+core/audio_fx.py       voice volume 0-200 % with limiter
 core/scheduler.py mcp_client.py telegram_bridge.py runtime.py tool_schema.py downloader.py
 actions/  terminal, computer_agent, face_id, scheduled_tasks, conversation_log, skill_manager,
-          mcp_servers, telegram_notify, media_control
+          mcp_servers, telegram_notify, media_control, cctv, knowledge
 plugins/  smart_home (+ _smart_home_backends), maker_hardware, email_client
 firmware/ jarvis_esp32 (ESP32/ESP8266), jarvis_arduino (Uno/Nano/Mega)
 ui_brain.py            AI BRAIN & VOICE settings / first-run screen

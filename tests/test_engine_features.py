@@ -158,7 +158,8 @@ def test_visual_question_gets_the_live_frame(engine, server, monkeypatch):
     user = [m for m in chat["messages"] if m["role"] == "user"][-1]
     assert user.get("images"), "the webcam frame was attached"
     assert "WEBCAM, live" in user["content"]
-    assert "[WHAT YOU SEE" in chat["messages"][0]["content"]
+    assert "[WHAT YOU SEE —" in user["content"] and "[WHAT YOU SEE —" not in chat["messages"][0]["content"], \
+        "per-turn context rides in the user's message so the system prompt stays cacheable"
 
 
 def test_learned_facts_reach_the_model(engine, server):
@@ -169,4 +170,20 @@ def test_learned_facts_reach_the_model(engine, server):
     n = len(server.requests)
     eng._agent_turn(local_engine.Request("Make me my usual tea", source="typed"), eng._turn_id)
     chat = [r["body"] for r in server.requests[n:] if r["path"] == "/api/chat"][-1]
-    assert "green tea without sugar" in chat["messages"][0]["content"]
+    user = [m for m in chat["messages"] if m["role"] == "user"][-1]
+    assert "green tea without sugar" in user["content"]
+
+
+def test_system_prompt_is_stable_between_turns(engine, server):
+    """Ollama reuses its cache of the conversation only while the start of the
+    prompt stays the same: two turns must send an identical system prompt."""
+    from core import local_engine
+    eng, st = engine
+    SCRIPT["fn"] = lambda m, t: {"text": "Sure."}
+    n = len(server.requests)
+    eng._agent_turn(local_engine.Request("What time is it in Tokyo?", source="typed"), eng._turn_id)
+    eng._agent_turn(local_engine.Request("And in London?", source="typed"), eng._turn_id)
+    chats = [r["body"] for r in server.requests[n:] if r["path"] == "/api/chat"]
+    assert chats[0]["messages"][0] == chats[-1]["messages"][0]
+    first = chats[0]["messages"]
+    assert chats[-1]["messages"][:len(first)] == first, "the earlier turn is resent unchanged"

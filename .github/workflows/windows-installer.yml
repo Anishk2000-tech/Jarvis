@@ -59,7 +59,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends nsis gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
           pip install uv
       - name: Build
-        run: python installer/build_windows.py --version 56.0.${{ github.run_number }}
+        run: python installer/build_windows.py --version 57.0.${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: JARVIS-Setup

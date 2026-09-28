@@ -520,6 +520,8 @@ class Learner:
     def start(self, log=print) -> None:
         self._log = log
         if self.running():
+            if self._stop.is_set():
+                self._stop.clear()                 # switched back on before it had stopped
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="learner")
@@ -594,6 +596,7 @@ class ScreenActivity:
 
     def start(self) -> None:
         if self.running():
+            self._stop.clear()
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="screen-activity")

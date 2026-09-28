@@ -66,6 +66,17 @@ def _region() -> str:
     if r and r != "auto":
         return r
     try:
+        import sys
+        if sys.platform == "win32":
+            import ctypes
+            buf = ctypes.create_unicode_buffer(85)
+            if ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, 85):
+                m = re.match(r"([a-z]{2})-([A-Z]{2})", buf.value)      # e.g. en-IN, hi-IN
+                if m:
+                    return f"{m.group(2).lower()}-{m.group(1)}"
+    except Exception:
+        pass
+    try:
         import locale
         loc = (locale.getlocale()[0] or "")
         m = re.search(r"[_-]([A-Za-z]{2})\b", loc)
