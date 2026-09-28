@@ -464,6 +464,44 @@ def _live_call(contents, config, timeout_ms: int, key: str):
     return _Reply(text) if text else None
 
 
+def _other_brain_selected() -> bool:
+    try:
+        from core import brain_config
+        return brain_config.uses_local_engine()
+    except Exception:
+        return False
+
+
+def _call_selected_brain(contents, tier: str, config, timeout_ms: int):
+    """Run a side call on the brain chosen in ⚙ → AI BRAIN. Returns an object
+    with `.text` (or None), like the REST path does."""
+    try:
+        from core import llm
+        system = ""
+        if config is not None:
+            system = (getattr(config, "system_instruction", None)
+                      or (config.get("system_instruction") if isinstance(config, dict) else "")
+                      or "")
+            if not isinstance(system, str):
+                system = str(system)
+        role = "fast" if tier == FAST else "smart"
+        text = llm.complete(contents, system=system or _SIDE_CALL_SYSTEM, role=role,
+                            max_tokens=4000 if tier != FAST else 800,
+                            timeout=max(30.0, timeout_ms / 1000.0 * 3))
+        return _Reply(text) if text else None
+    except Exception as e:
+        print(f"[Brain] side call failed: {type(e).__name__}: {str(e)[:200]}")
+        return None
+
+
+_SIDE_CALL_SYSTEM = (
+    "You are a precise data-processing function inside a desktop assistant. "
+    "Produce exactly the output the request asks for and nothing else — no "
+    "greeting, no explanation unless asked. If JSON is requested, output only "
+    "JSON. If code is requested, output only the code."
+)
+
+
 def call(contents, tier: str = FAST, config=None,
          timeout_ms: int = DEFAULT_TIMEOUT_MS, key: str = ""):
     """Run one generation, walking the ladder until one answers.
@@ -474,6 +512,23 @@ def call(contents, tier: str = FAST, config=None,
     a silent None during a session nobody can debug is how the original problem
     stayed hidden.
     """
+    # ── Another brain is selected ────────────────────────────────────────────
+    # When the assistant runs on Ollama, LM Studio, Claude, an OpenAI-compatible
+    # API or Gemini's text API, every side call made by the actions (summaries,
+    # screenshots, code, JSON extraction) goes to THAT brain. Nothing in
+    # actions/ needs to know: they keep calling gemini.call(...) and get an
+    # object with a `.text`, exactly as before.
+    #
+    # Grounded search is the exception: it only exists on Gemini. With a Gemini
+    # key it still runs there; without one this returns None and web_search
+    # falls back to DuckDuckGo, which it already does on any Gemini failure.
+    if _other_brain_selected():
+        if tier == SEARCH:
+            if not (key or api_key()):
+                return None
+        else:
+            return _call_selected_brain(contents, tier, config, timeout_ms)
+
     # `tier` is normally FAST or SMART. Anything else is taken to be an explicit
     # model name — screen_agent lets the user pick one in its settings — and it
     # is tried first, with the reasoning ladder behind it. So a user's choice is

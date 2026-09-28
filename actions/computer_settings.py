@@ -12,7 +12,7 @@ try:
     pyautogui.FAILSAFE = True
     pyautogui.PAUSE    = 0.05
     _PYAUTOGUI = True
-except ImportError:
+except Exception:           # ImportError, or no display on a headless Linux box
     _PYAUTOGUI = False
 
 try:
@@ -700,6 +700,12 @@ _DANGEROUS_ACTIONS = set(_IRREVERSIBLE)
 # out in full. What is left is spelling tolerance, and difflib does that in
 # microseconds instead of ~600 ms and a quota unit.
 _ALIASES = {
+    # The assistant's own voice first: "speak louder" must not change the
+    # system volume, and "louder" alone still does.
+    "voice_louder":    ("speak louder", "talk louder", "your volume up", "your voice louder",
+                        "increase your volume", "raise your volume", "you louder"),
+    "voice_quieter":   ("speak softer", "talk quieter", "speak quieter", "your volume down",
+                        "your voice quieter", "decrease your volume", "lower your volume"),
     "volume_up":       ("louder", "raise volume", "turn it up", "increase volume"),
     "volume_down":     ("quieter", "lower volume", "turn it down", "decrease volume"),
     "mute":            ("silence", "sound off", "no sound"),
@@ -721,7 +727,11 @@ _ALIASES = {
 }
 
 _VALUE_ACTIONS = {"volume_set", "type_text", "press_key", "reload_n",
-                  "scroll_up", "scroll_down"}
+                  "scroll_up", "scroll_down", "voice_volume_set", "voice_louder",
+                  "voice_quieter", "voice_volume_get"}
+
+_VOICE_WORDS = ("your volume", "your voice", "you speak", "your speaking", "jarvis volume",
+                "assistant volume", "voice volume", "speak at", "talk at")
 
 
 def _normalise(text: str) -> str:
@@ -748,9 +758,12 @@ def _detect_action(description: str) -> dict:
     low = raw.lower()
 
     # 2. "set volume to 30", "sesi 30 yap" — a number next to a volume word.
+    #    "your volume to 150" is the assistant's own voice (0-200 %).
     num = re.search(r"(\d{1,3})\s*%?", low)
-    if num and any(w in low for w in ("volume", "ses", "sound", "lautstark", "громкость")):
-        return {"action": "volume_set", "value": max(0, min(100, int(num.group(1))))}
+    if num and any(w in low for w in _VOICE_WORDS):
+        return {"action": "voice_volume_set", "value": max(0, min(200, int(num.group(1))))}
+    if num and any(w in low for w in ("volume", "ses", "sound", "lautstark", "громкость", "awaaz", "आवाज")):
+        return {"action": "volume_set", "value": max(0, min(200, int(num.group(1))))}
 
     # 3. Alias phrases.
     for action, phrases in _ALIASES.items():
@@ -781,15 +794,36 @@ def _suggest(description: str) -> str:
     return (f"I could not match '{description}' to a computer action. "
             f"Call computer_settings again with an exact `action` from: {hint}.")
 
+def _voice_volume(action: str, value) -> str:
+    """The assistant's own speaking volume, 0-200 %, independent of Windows."""
+    from core import audio_fx
+    cur = audio_fx.volume_percent(max_age=0)
+    if action == "voice_volume_get":
+        return f"My voice volume is {cur:.0f}% (0-200)."
+    if action == "voice_volume_set":
+        try:
+            target = float(str(value).strip().rstrip("%"))
+        except (TypeError, ValueError):
+            return "Give the voice volume as a number from 0 to 200."
+    else:
+        try:
+            step = float(str(value).strip().rstrip("%")) if value not in (None, "") else 25.0
+        except (TypeError, ValueError):
+            step = 25.0
+        target = cur + step if action == "voice_louder" else cur - step
+    new = audio_fx.set_volume_percent(target)
+    push_undo(f"voice {cur:.0f}% → {new}%",
+              lambda b=cur: (audio_fx.set_volume_percent(b), f"My voice is back to {b:.0f}%.")[1])
+    note = " That is the maximum." if new >= audio_fx.MAX_PERCENT else ""
+    return f"My voice volume is now {new}%.{note}"
+
+
 def computer_settings(
     parameters: dict = None,
     response=None,
     player=None,
     session_memory=None,
 ) -> str:
-    if not _PYAUTOGUI:
-        return "pyautogui is not installed. Run: pip install pyautogui"
-
     params      = parameters or {}
     raw_action  = params.get("action", "").strip()
     description = params.get("description", "").strip()
@@ -805,6 +839,12 @@ def computer_settings(
 
     if not action:
         return _suggest(description or raw_action)
+
+    if action in ("voice_volume_set", "voice_louder", "voice_quieter", "voice_volume_get"):
+        return _voice_volume(action, value)
+
+    if not _PYAUTOGUI:
+        return "pyautogui is not installed. Run: pip install pyautogui"
 
     print(f"[Settings] Action: {action}  Value: {value}  OS: {_OS}")
     if player:
@@ -830,7 +870,19 @@ def computer_settings(
 
     if action == "volume_set":
         try:
-            target = int(value if value is not None else 50)
+            target = int(float(str(value if value is not None else 50).strip().rstrip("%")))
+            if target > 100:
+                # Windows stops at 100 %. Past that, the assistant's own voice is
+                # boosted the way VLC boosts a video (up to 200 %).
+                volume_set(100)
+                from core import audio_fx
+                old_voice = audio_fx.volume_percent(max_age=0)
+                new_voice = audio_fx.set_volume_percent(target)
+                push_undo(f"voice {old_voice:.0f}% → {new_voice}%",
+                          lambda b=old_voice: (audio_fx.set_volume_percent(b), f"My voice is back to {b:.0f}%.")[1])
+                return (f"System volume is at its maximum (100% — Windows cannot go higher), and my own "
+                        f"voice is now boosted to {new_voice}%. Music and videos stay at 100%; for "
+                        f"louder video use the player's own boost (VLC goes to 200%).")
             before = volume_get()
             volume_set(target)
             if before is not None:
@@ -941,7 +993,10 @@ TOOL = {
                     "undo | redo | select_all | save | enter | escape | press_key | "
                     "type_text | screenshot | lock_screen | open_settings | "
                     "file_explorer | open_run | dark_mode | toggle_wifi | "
-                    "restart | shutdown"
+                    "restart | shutdown | voice_volume_set | voice_louder | "
+                    "voice_quieter | voice_volume_get.  voice_* change YOUR OWN "
+                    "speaking volume (0-200 %, like VLC's boost) without touching "
+                    "the system volume"
                 )
             },
             "description": {
@@ -953,7 +1008,8 @@ TOOL = {
             },
             "value": {
                 "type": "STRING",
-                "description": "Optional value: volume level 0-100, text to type, key name, etc."
+                "description": ("Optional value: system volume 0-100 (above 100 boosts your "
+                                "own voice instead), voice volume 0-200, text to type, key name, etc.")
             }
         },
         "required": []

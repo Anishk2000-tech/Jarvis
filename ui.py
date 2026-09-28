@@ -53,7 +53,7 @@ from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
     QGraphicsScene, QGraphicsView,
-    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
+    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar, QSlider,
 )
 
 try:
@@ -72,6 +72,16 @@ CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
 
+def _installed_launcher() -> Path | None:
+    """JARVIS.exe when running from the Windows installer's layout, else None."""
+    for base in (os.environ.get("JARVIS_HOME", ""), str(BASE_DIR.parent)):
+        if base:
+            exe = Path(base) / "JARVIS.exe"
+            if exe.exists():
+                return exe
+    return None
+
+
 def _read_full_config() -> dict:
     """Read api_keys.json config dict. Returns {} on any error."""
     try:
@@ -82,7 +92,7 @@ def _read_full_config() -> dict:
 
 # Single source of truth for the release name — the window title, the header
 # badge and the readme must never disagree again.
-APP_VERSION  = "MARK LV"
+APP_VERSION  = "MARK LVII"
 APP_PROTOCOL = APP_VERSION.split()[-1]
 
 _DEFAULT_W, _DEFAULT_H = 980, 700
@@ -1388,6 +1398,73 @@ class _CameraPreview(QWidget):
         self.show()
         self.raise_()
         self._timer.start(6_000)   # auto-dismiss after 6 s
+
+
+class _LivePip(QWidget):
+    """Live vision's own window on the HUD: what the webcam sees, with the
+    detector's boxes and the names face recognition put on people."""
+
+    _W = 250
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            _LivePip {{
+                background: rgba(0, 6, 10, 235);
+                border: 1px solid {C.PRI_DIM};
+                border-radius: 6px;
+            }}
+        """)
+        self.setFixedWidth(self._W)
+        self.dismissed = False
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(6, 4, 6, 6)
+        lay.setSpacing(3)
+        hdr = QHBoxLayout()
+        title = QLabel("👁  LIVE VISION")
+        title.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        hdr.addWidget(title)
+        hdr.addStretch()
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(16, 16)
+        close_btn.setFont(QFont("Courier New", 8))
+        close_btn.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setToolTip("Hide the view (live vision keeps running)")
+        close_btn.clicked.connect(self._dismiss)
+        hdr.addWidget(close_btn)
+        lay.addLayout(hdr)
+        self._img = QLabel()
+        self._img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._img.setStyleSheet("background: transparent;")
+        lay.addWidget(self._img)
+        self._txt = QLabel("")
+        self._txt.setWordWrap(True)
+        self._txt.setFont(QFont("Courier New", 7))
+        self._txt.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        lay.addWidget(self._txt)
+        self.hide()
+
+    def _dismiss(self):
+        self.dismissed = True
+        self.hide()
+
+    def show_frame(self, data: bytes, summary: str) -> None:
+        if self.dismissed:
+            return
+        px = QPixmap()
+        px.loadFromData(data)
+        if not px.isNull():
+            scaled = px.scaled(self._W - 12, 170, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            self._img.setPixmap(scaled)
+            self._img.setFixedSize(scaled.width(), scaled.height())
+        self._txt.setText(summary or "")
+        self.adjustSize()
+        self.show()
+        self.raise_()
 
 
 class SetupOverlay(QWidget):
@@ -2958,6 +3035,8 @@ class MainWindow(QMainWindow):
     _quiz_sig       = pyqtSignal(str, object, object)  # (topic, questions, grader)
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
+    _vision_sig     = pyqtSignal(bytes, str)  # live vision frame + scene summary
+    _cctv_sig       = pyqtSignal()            # open the camera wall from any thread
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -3241,17 +3320,23 @@ class MainWindow(QMainWindow):
         self._quiz_sig.connect(self._show_quiz)
         self._quiz_hide_sig.connect(self._hide_quiz)
         self._review_sig.connect(self._show_review)
+        self._vision_sig.connect(self._show_vision_frame)
+        self._cctv_sig.connect(self._open_cctv)
         self._cam_stop = threading.Event()
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
         self._cam_preview = _CameraPreview(self.centralWidget())
+        self._live_pip = _LivePip(self.centralWidget())
+        self._cctv_wall = None
 
         # Clipboard panel (child of central widget, bottom-center)
         self._clipboard_panel = ClipboardPanel(self.centralWidget())
         self._clipboard_panel.action_requested.connect(self._on_clipboard_action)
         QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
-        self._overlay: SetupOverlay | None = None
+        self._overlay = None
+        self._setup_message = ""
+        self.on_brain_change = None     # callable: () -> None, set by the engine
         self._ready = self._check_config()
         if not self._ready:
             self._show_setup()
@@ -3262,6 +3347,35 @@ class MainWindow(QMainWindow):
         sc_full.activated.connect(self._toggle_fullscreen)
         sc_intr = QShortcut(QKeySequence("Escape"), self)
         sc_intr.activated.connect(self._do_interrupt)
+
+    def _show_vision_frame(self, data: bytes, summary: str):
+        """Slot — live vision's picture-in-picture, bottom-left of the HUD."""
+        try:
+            from core import brain_config
+            senses = brain_config.get_senses()
+            if not senses.get("live_vision") or not senses.get("vision_preview", True):
+                self._live_pip.hide()
+                return
+        except Exception:
+            pass
+        self._live_pip.show_frame(data, summary)
+        self._position_live_pip()
+
+    def _position_live_pip(self):
+        cw = self.centralWidget()
+        ph = self._live_pip.sizeHint().height()
+        self._live_pip.setGeometry(_LEFT_W + 12, cw.height() - ph - 28, _LivePip._W, ph)
+
+    def _open_cctv(self):
+        from ui_cctv import CameraWallOverlay
+        self._close_setup()
+        self._close_controls()
+        cw = self.centralWidget()
+        if self._cctv_wall is None:
+            self._cctv_wall = CameraWallOverlay(cw)
+        m = 16
+        self._cctv_wall.setGeometry(m, 50, cw.width() - 2 * m, cw.height() - 50 - m)
+        self._cctv_wall.open_wall()
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""
@@ -3302,37 +3416,27 @@ class MainWindow(QMainWindow):
         t.start()
 
     def _cam_loop(self) -> None:
+        # The camera is shared (core/camera.py): face presence and the vision
+        # tool read the same device, which on Windows cannot be opened twice.
+        from core.camera import hub as _camera_hub
+        hub = _camera_hub()
+        hub.acquire()
         try:
             import cv2
-            # Reuse camera index detected by screen_processor (cached in api_keys.json)
-            cam_idx = 0
-            try:
-                import json as _j
-                cfg = _j.loads((CONFIG_DIR / "api_keys.json").read_text())
-                cam_idx = int(cfg.get("camera_index", 0))
-            except Exception:
-                pass
-            try:
-                backend = cv2.CAP_DSHOW if _OS == "Windows" else cv2.CAP_ANY
-            except AttributeError:
-                backend = 0
-            cap = cv2.VideoCapture(cam_idx, backend)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(0)
-            if not cap.isOpened():
+            if hub.wait_frame(timeout=6.0) is None:
                 return
-            # warm-up frames
-            for _ in range(5):
-                cap.read()
-            while not self._cam_stop.wait(0.033) and cap.isOpened():
-                ret, frame = cap.read()
-                if ret and frame is not None:
-                    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-                    self._cam_frame_sig.emit(buf.tobytes())
-            cap.release()
+            while not self._cam_stop.wait(0.033):
+                frame = hub.latest(max_age=2.0)
+                if frame is None:
+                    if not hub.active:
+                        break
+                    continue
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                self._cam_frame_sig.emit(buf.tobytes())
         except Exception as e:
             print(f"[Camera] Stream error: {e}")
         finally:
+            hub.release()
             self._cam_stream_sig.emit(False)
 
     def stop_camera_stream(self) -> None:
@@ -3741,12 +3845,19 @@ class MainWindow(QMainWindow):
 
             # ── Windows ───────────────────────────────────────────────────────
             if _os == "Windows":
-                pythonw  = python.parent / "pythonw.exe"
-                target   = str(pythonw if pythonw.exists() else python)
-                lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
-                self._create_lnk_windows(lnk, target, str(script),
-                                         str(script.parent), icon_loc)
+                launcher = _installed_launcher()
+                if launcher:
+                    # Installed build: the launcher sets up the environment.
+                    lnk = str(desktop / "JARVIS.lnk")
+                    self._create_lnk_windows(lnk, str(launcher), "",
+                                             str(launcher.parent), f"{launcher},0")
+                else:
+                    pythonw  = python.parent / "pythonw.exe"
+                    target   = str(pythonw if pythonw.exists() else python)
+                    lnk      = str(desktop / "J.A.R.V.I.S.lnk")
+                    icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
+                    self._create_lnk_windows(lnk, target, str(script),
+                                             str(script.parent), icon_loc)
 
             # ── macOS — proper .app bundle (no Terminal window) ───────────────
             elif _os == "Darwin":
@@ -3869,6 +3980,10 @@ class MainWindow(QMainWindow):
             cw.height() - ph - 28,
             pw, ph,
         )
+        if hasattr(self, '_live_pip') and self._live_pip.isVisible():
+            self._position_live_pip()
+        if getattr(self, '_cctv_wall', None) is not None and self._cctv_wall.isVisible():
+            self._cctv_wall.setGeometry(16, 50, cw.width() - 32, cw.height() - 66)
         # Clipboard panel — bottom-center
         if hasattr(self, '_clipboard_panel') and self._clipboard_panel.isVisible():
             self._position_clipboard_panel()
@@ -4199,6 +4314,14 @@ class MainWindow(QMainWindow):
                           f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
         lay.addWidget(hdr)
 
+        brain_btn = QPushButton("🧠  AI BRAIN & VOICE")
+        brain_btn.setFixedHeight(30)
+        brain_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        brain_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        brain_btn.setStyleSheet(_BTN_STYLE_PRI)
+        brain_btn.clicked.connect(lambda: self._open_brain_settings())
+        lay.addWidget(brain_btn)
+
         remote_btn = QPushButton("◉  REMOTE CONTROL")
         remote_btn.setFixedHeight(30)
         remote_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
@@ -4296,6 +4419,50 @@ class MainWindow(QMainWindow):
 
         self._brief_btn = _row(QPushButton())
         self._brief_btn.clicked.connect(self._toggle_brief)
+
+        self._listen_btn = _row(QPushButton())
+        self._listen_btn.clicked.connect(self._toggle_listen_mode)
+        self._refresh_listen_btn()
+
+        self._vision_btn = _row(QPushButton())
+        self._vision_btn.clicked.connect(self._toggle_live_vision)
+        self._refresh_vision_btn()
+
+        cctv_btn = _row(QPushButton("📹  CCTV CAMERAS"), self._BTN_DIM)
+        cctv_btn.clicked.connect(self._open_cctv)
+
+        # The assistant's own volume, 0–200 % (core/audio_fx.py).
+        vol_row = QWidget()
+        vol_row.setStyleSheet("background: transparent;")
+        vl = QHBoxLayout(vol_row)
+        vl.setContentsMargins(0, 2, 0, 2)
+        vl.setSpacing(6)
+        self._vol_lbl = QLabel()
+        self._vol_lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._vol_lbl.setFixedWidth(84)
+        self._vol_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        self._vol_slider = QSlider(Qt.Orientation.Horizontal)
+        self._vol_slider.setRange(0, 200)
+        self._vol_slider.setSingleStep(5)
+        self._vol_slider.setPageStep(25)
+        self._vol_slider.setToolTip("My voice volume — above 100% is a boost, like VLC")
+        self._vol_slider.setStyleSheet(
+            f"QSlider::groove:horizontal {{ height: 4px; background: {C.BORDER}; border-radius: 2px; }}"
+            f"QSlider::sub-page:horizontal {{ background: {C.PRI_DIM}; border-radius: 2px; }}"
+            f"QSlider::handle:horizontal {{ background: {C.PRI}; width: 10px; margin: -5px 0; border-radius: 5px; }}")
+        try:
+            from core import audio_fx
+            self._vol_slider.setValue(int(audio_fx.volume_percent(max_age=0)))
+        except Exception:
+            self._vol_slider.setValue(100)
+        self._vol_timer = QTimer(self)
+        self._vol_timer.setSingleShot(True)
+        self._vol_timer.timeout.connect(self._save_voice_volume)
+        self._vol_slider.valueChanged.connect(self._on_vol_slider)
+        self._on_vol_slider(self._vol_slider.value(), save=False)
+        vl.addWidget(self._vol_lbl)
+        vl.addWidget(self._vol_slider, 1)
+        lay.addWidget(vol_row)
 
         self._wake_btn = _row(QPushButton())
         self._wake_btn.clicked.connect(self._toggle_wake_word)
@@ -4982,10 +5149,14 @@ class MainWindow(QMainWindow):
                 if currently_on:
                     winreg.DeleteValue(reg, "JARVIS_AI")
                 else:
-                    pythonw = Path(sys.executable).parent / "pythonw.exe"
-                    exe = str(pythonw if pythonw.exists() else sys.executable)
-                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ,
-                                      f'"{exe}" "{script}"')
+                    launcher = _installed_launcher()
+                    if launcher:
+                        value = f'"{launcher}"'
+                    else:
+                        pythonw = Path(sys.executable).parent / "pythonw.exe"
+                        exe = str(pythonw if pythonw.exists() else sys.executable)
+                        value = f'"{exe}" "{script}"'
+                    winreg.SetValueEx(reg, "JARVIS_AI", 0, winreg.REG_SZ, value)
                 winreg.CloseKey(reg)
             elif _OS == "Darwin":
                 plist_dir = Path.home() / "Library" / "LaunchAgents"
@@ -5552,39 +5723,184 @@ class MainWindow(QMainWindow):
         self.hud.speaking = (state == "SPEAKING")
 
     def _check_config(self) -> bool:
-        if not API_FILE.exists(): return False
         try:
-            d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
+            from core import brain_config
+            return brain_config.is_configured()
         except Exception:
             return False
 
-    def _show_setup(self):
-        ov = SetupOverlay(self.centralWidget())
+    def _show_setup(self, message: str = ""):
+        """First launch, or a rejected API key: the brain picker, full-window."""
+        from ui_brain import BrainSettingsOverlay
+        if self._overlay is not None:
+            try:
+                self._overlay.hide()
+                self._overlay.deleteLater()
+            except Exception:
+                pass
         cw = self.centralWidget()
-        ow, oh = 460, 390
-        ov.setGeometry(
-            (cw.width()  - ow) // 2,
-            (cw.height() - oh) // 2,
-            ow, oh,
-        )
-        ov.done.connect(self._on_setup_done)
+        ov = BrainSettingsOverlay(cw, first_run=True, message=message or self._setup_message)
+        ow, oh = min(560, cw.width() - 24), min(640, cw.height() - 24)
+        ov.setGeometry((cw.width() - ow) // 2, (cw.height() - oh) // 2, ow, oh)
+        ov.saved.connect(self._on_setup_done)
         ov.show()
+        ov.raise_()
         self._overlay = ov
 
-    def _on_setup_done(self, key: str, os_name: str):
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
-            encoding="utf-8",
-        )
+    def _on_setup_done(self, _needs_restart: bool = False):
         self._ready = True
         if self._overlay:
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
         self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
+        from core import brain_config, runtime
+        label = brain_config.PROVIDER_LABELS.get(brain_config.provider(), "")
+        self._log.append_log(f"SYS: Initialised — {label}. {self._assistant_name} starting…")
+        # Shown again after a rejected key while an engine is already running:
+        # if the brain now needs the other engine, start afresh.
+        eng = runtime.engine()
+        if eng is not None:
+            running_local = getattr(eng, "engine_kind", "") == "local"
+            if running_local != brain_config.uses_local_engine():
+                self._log.append_log("SYS: Switching engines — restarting in a moment…")
+                QTimer.singleShot(1200, runtime.restart_app)
+
+    # ── AI brain & voice settings ────────────────────────────────────────────
+    def _open_brain_settings(self, message: str = ""):
+        from ui_brain import BrainSettingsOverlay
+        self._close_setup()
+        cw = self.centralWidget()
+        ov = BrainSettingsOverlay(cw, first_run=False, message=message)
+        ow, oh = min(560, cw.width() - 24), min(660, cw.height() - 24)
+        ov.setGeometry((cw.width() - ow) // 2, (cw.height() - oh) // 2, ow, oh)
+        ov.saved.connect(self._on_brain_saved)
+        ov.show()
+        ov.raise_()
+        self._brain_overlay = ov
+
+    def _on_brain_saved(self, needs_restart: bool):
+        ov = getattr(self, "_brain_overlay", None)
+        if ov is not None:
+            ov.hide()
+        self._refresh_listen_btn()
+        self._refresh_vision_btn()
+        self._apply_live_vision()
+        self._apply_learning()
+        try:
+            from core import audio_fx
+            if hasattr(self, "_vol_slider"):
+                self._vol_slider.blockSignals(True)
+                self._vol_slider.setValue(int(audio_fx.volume_percent(max_age=0)))
+                self._vol_slider.blockSignals(False)
+                self._on_vol_slider(self._vol_slider.value(), save=False)
+        except Exception:
+            pass
+        try:
+            from core import brain_config, face_id
+            if brain_config.get_senses().get("face_presence"):
+                face_id.presence().start(log=self._log_sig.emit)
+            else:
+                face_id.presence().stop()
+        except Exception as e:
+            self._log.append_log(f"ERR: Face presence — {e}")
+        if needs_restart:
+            self._log.append_log("SYS: Switching engines — restarting in a moment…")
+            from core import runtime
+            QTimer.singleShot(1200, runtime.restart_app)
+            return
+        self._log.append_log("SYS: Settings saved — applying.")
+        if self.on_brain_change:
+            threading.Thread(target=self.on_brain_change, daemon=True).start()
+
+    def _refresh_listen_btn(self):
+        if not hasattr(self, "_listen_btn"):
+            return
+        try:
+            from core import brain_config
+            mode = brain_config.get_senses().get("listen_mode", "active")
+        except Exception:
+            mode = "active"
+        self._listen_btn.setText("👂  LISTEN: AMBIENT (says name)" if mode == "ambient"
+                                 else "👂  LISTEN: ACTIVE")
+        self._listen_btn.setStyleSheet(self._BTN_PRI if mode == "ambient" else self._BTN_DIM)
+
+    def _toggle_listen_mode(self):
+        from core import brain_config
+        mode = brain_config.get_senses().get("listen_mode", "active")
+        new = "ambient" if mode == "active" else "active"
+        brain_config.save_senses({"listen_mode": new})
+        self._refresh_listen_btn()
+        name = self._assistant_name
+        self._log.append_log(
+            f"SYS: Ambient listening — I hear the room and answer when you say '{name}'."
+            if new == "ambient" else "SYS: Active listening — I answer everything I hear.")
+
+
+    def _on_vol_slider(self, value: int, save: bool = True):
+        v = int(value)
+        boost = v > 100
+        self._vol_lbl.setText(f"🔊 VOICE {v}%")
+        self._vol_lbl.setStyleSheet(f"color: {C.ACC2 if boost else C.TEXT_MED}; background: transparent;")
+        if save:
+            self._vol_timer.start(250)
+
+    def _save_voice_volume(self):
+        try:
+            from core import audio_fx
+            audio_fx.set_volume_percent(self._vol_slider.value())
+        except Exception as e:
+            self._log.append_log(f"ERR: Voice volume — {e}")
+
+    def _refresh_vision_btn(self):
+        if not hasattr(self, "_vision_btn"):
+            return
+        try:
+            from core import brain_config
+            on = bool(brain_config.get_senses().get("live_vision"))
+        except Exception:
+            on = False
+        self._vision_btn.setText("👁  LIVE VISION: ON" if on else "👁  LIVE VISION: OFF")
+        self._vision_btn.setStyleSheet(self._BTN_PRI if on else self._BTN_DIM)
+
+    def _toggle_live_vision(self):
+        from core import brain_config
+        on = not bool(brain_config.get_senses().get("live_vision"))
+        brain_config.save_senses({"live_vision": on})
+        self._apply_live_vision()
+        self._refresh_vision_btn()
+
+    def _apply_live_vision(self):
+        """Start or stop the webcam watcher to match the settings."""
+        try:
+            from core import brain_config, perception
+            per = perception.perception()
+            if brain_config.get_senses().get("live_vision"):
+                per.on_frame = lambda data, summary: self._vision_sig.emit(data, summary)
+                self._live_pip.dismissed = False
+                per.start(log=self._log_sig.emit)
+            else:
+                per.stop()
+                self._live_pip.hide()
+        except Exception as e:
+            self._log.append_log(f"ERR: Live vision — {e}")
+
+    def _apply_learning(self):
+        try:
+            import sys as _s
+            from core import brain_config, knowledge
+            cfg = brain_config.get_learning_cfg()
+            if cfg.get("enabled", True):
+                knowledge.learner().start(log=self._log_sig.emit)
+                if cfg.get("from_screen", True) and _s.platform == "win32":
+                    knowledge.screen_activity().start()
+                else:
+                    knowledge.screen_activity().stop()
+            else:
+                knowledge.learner().stop()
+                knowledge.screen_activity().stop()
+        except Exception as e:
+            self._log.append_log(f"ERR: Learning — {e}")
 
 
 class _RootShim:
@@ -5656,6 +5972,14 @@ class JarvisUI:
     @on_audio_device_change.setter
     def on_audio_device_change(self, cb):
         self._win.on_audio_device_change = cb
+
+    @property
+    def on_brain_change(self):
+        return self._win.on_brain_change
+
+    @on_brain_change.setter
+    def on_brain_change(self, cb):
+        self._win.on_brain_change = cb
 
     def show_confirm(self, title: str, detail: str) -> None:
         """Thread-safe: raise the irreversible-action gate. Called from action
@@ -5792,9 +6116,10 @@ class JarvisUI:
         self._win._review_sig.emit(str(title or ""), str(summary or ""),
                                    list(findings or []), list(unclear or []))
 
-    def prompt_reconfig(self):
-        """Thread-safe: show the API key setup overlay (e.g. after an auth error)."""
+    def prompt_reconfig(self, message: str = ""):
+        """Thread-safe: show the setup overlay (e.g. after an auth error)."""
         self._win._ready = False
+        self._win._setup_message = message or "The API key was rejected — please enter a valid key."
         self._win._reconfig_sig.emit()
 
     def show_camera_frame(self, img_bytes: bytes):
@@ -5828,6 +6153,14 @@ class JarvisUI:
 
     def video_is_playing(self) -> bool:
         return bool(self._win.video_is_playing())
+
+    def show_vision_frame(self, jpeg: bytes, summary: str = "") -> None:
+        """Thread-safe: live vision's annotated frame for the HUD corner."""
+        self._win._vision_sig.emit(bytes(jpeg or b""), str(summary or ""))
+
+    def open_cctv(self) -> None:
+        """Thread-safe: open the CCTV camera wall."""
+        self._win._cctv_sig.emit()
 
     def start_camera_stream(self) -> None:
         """Thread-safe: start live camera feed in the full HUD area."""

@@ -155,21 +155,13 @@ def _capture_camera() -> tuple[bytes, str]:
     if not _CV2:
         raise RuntimeError("OpenCV (cv2) is not installed. Run: pip install opencv-python")
 
-    index   = _get_camera_index()
-    backend = _cv2_backend()
-    cap     = cv2.VideoCapture(index, backend)
-
-    if not cap.isOpened():
-        raise RuntimeError(f"Camera index {index} could not be opened.")
-
-    for _ in range(10):
-        cap.read()
-
-    ret, frame = cap.read()
-    cap.release()
-
-    if not ret or frame is None:
-        raise RuntimeError("Camera returned no frame.")
+    # Through the shared hub: face presence or the HUD's live view may already
+    # hold the camera, and on Windows a second open of the same device fails.
+    from core.camera import hub as _camera_hub
+    frame = _camera_hub().snapshot()
+    if frame is None:
+        err = _camera_hub().error or "the camera returned no frame"
+        raise RuntimeError(f"Camera unavailable: {err}.")
 
     if _PIL:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

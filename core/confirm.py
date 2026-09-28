@@ -105,10 +105,18 @@ def request(key: str, title: str, detail: str, run: Callable[[], str]) -> str:
         return f"Could not ask for confirmation: {e}. Nothing was done."
 
     _log(f"SYS: Awaiting confirmation — {title}")
+    by_voice = False
+    try:
+        from core import brain_config
+        by_voice = bool(brain_config.get_senses().get("voice_confirm", True))
+    except Exception:
+        pass
+    how = ("press CONFIRM on the HUD or simply say \"confirm\" (or \"cancel\")"
+           if by_voice else "press CONFIRM on the HUD")
     return (
         f"[CONFIRMATION_PENDING] I have put a confirmation on screen for: {title}. "
-        f"Say ONE short sentence in the user's own language telling them you need "
-        f"them to confirm it on the HUD before you do it. Do not claim it is done."
+        f"Say ONE short sentence in the user's own language asking them to {how} "
+        f"before you do it. Do not claim it is done."
     )
 
 

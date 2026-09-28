@@ -15,6 +15,25 @@ if _platform.system() == "Windows":
     _subprocess.Popen = _Popen
 
 
+# ── No console (pythonw / JARVIS.exe): write the log to a file ──────────────
+# Without a console sys.stdout is None and every print() in the app would be
+# lost — or, in libraries that call sys.stderr.write directly, crash. The log
+# file is also the first thing to look at when something misbehaves.
+import sys as _sys0
+import os as _os0
+if _sys0.stdout is None or _sys0.stderr is None:
+    try:
+        _logdir = _os0.path.join(_os0.path.dirname(_os0.path.abspath(__file__)), "logs")
+        _os0.makedirs(_logdir, exist_ok=True)
+        _logfile = _os0.path.join(_logdir, "jarvis.log")
+        if _os0.path.exists(_logfile) and _os0.path.getsize(_logfile) > 4_000_000:
+            _os0.replace(_logfile, _logfile + ".1")
+        _fh = open(_logfile, "a", encoding="utf-8", buffering=1, errors="replace")
+        _sys0.stdout = _sys0.stdout or _fh
+        _sys0.stderr = _sys0.stderr or _fh
+    except Exception:
+        pass
+
 # ── Console must survive non-UTF-8 code pages ────────────────────────────────
 # Every status line in this file carries an emoji, and on a legacy Windows
 # console the active code page is the system one — cp1254 in Turkey, cp1251 in
@@ -33,6 +52,11 @@ for _stream in ("stdout", "stderr"):
         pass          # pythonw / redirected pipes / anything exotic — never fatal
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+# `import main` from another module must get THIS running module, not a second
+# copy executed from disk — core.gemini reads LIVE_MODEL from it and the local
+# engine reuses helpers defined here.
+_sys.modules.setdefault("main", _sys.modules[__name__])
 
 import asyncio
 import re
@@ -497,6 +521,90 @@ TOOL_DECLARATIONS = [
     },
 ]
 
+# ── Hooks into the extensions added by this fork ────────────────────────────
+# Each is imported lazily and fails soft: a missing optional package disables
+# one feature, never the assistant.
+
+def _mcp_declarations() -> list:
+    try:
+        from core import mcp_client
+        return mcp_client.manager().gemini_declarations()
+    except Exception:
+        return []
+
+
+def _mcp_has(name: str) -> bool:
+    try:
+        from core import mcp_client
+        return mcp_client.manager().has(name)
+    except Exception:
+        return False
+
+
+def _journal_append(speaker: str, text: str, addressed) -> None:
+    try:
+        from core import journal
+        journal.append(speaker, text, addressed)
+    except Exception:
+        pass
+
+
+def _emit_assistant_text(text: str) -> None:
+    try:
+        from core import runtime
+        runtime.emit_assistant_text(text)
+    except Exception:
+        pass
+
+
+def _start_mcp(engine) -> None:
+    from core import mcp_client
+    mcp_client.manager().start_async(log=engine.ui.write_log)
+
+
+def _start_telegram(engine) -> None:
+    from core import telegram_bridge
+    telegram_bridge.start(log=engine.ui.write_log)
+
+
+def _start_face_presence(engine) -> None:
+    from core import brain_config
+    if brain_config.get_senses().get("face_presence"):
+        from core import face_id
+        face_id.presence().start(log=engine.ui.write_log)
+
+
+def _start_live_vision(engine) -> None:
+    """The webcam stays open and the assistant keeps looking (core/perception.py)."""
+    from core import brain_config, perception
+    per = perception.perception()
+    show = getattr(engine.ui, "show_vision_frame", None)
+    if show is not None:
+        per.on_frame = show
+    if brain_config.get_senses().get("live_vision"):
+        per.start(log=engine.ui.write_log)
+
+
+def _start_cctv(engine) -> None:
+    """Security cameras (core/cctv.py): watched while a mode other than off is set."""
+    from core import cctv
+    data = cctv.load_cfg()
+    mgr = cctv.manager()
+    if data["cameras"] and data["mode"] != "off":
+        mgr.start(log=engine.ui.write_log)
+        engine.ui.write_log(f"SYS: 📹 Watching {len(data['cameras'])} camera(s) — mode {data['mode']}.")
+
+
+def _start_learning(engine) -> None:
+    """Distil what was seen, heard and done into lasting knowledge (core/knowledge.py)."""
+    from core import brain_config, knowledge
+    cfg = brain_config.get_learning_cfg()
+    if cfg.get("enabled", True):
+        knowledge.learner().start(log=engine.ui.write_log)
+        if cfg.get("from_screen", True) and _sys.platform == "win32":
+            knowledge.screen_activity().start()
+
+
 class _ReconnectSignal(Exception):
     """Raised inside the session TaskGroup to force a clean, voluntary reconnect
     (e.g. the user picked a new voice — the voice is fixed at connect time, so
@@ -581,6 +689,9 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
+        # ⚙ → AI BRAIN & VOICE saved: rebuild the session, keep the conversation.
+        self.ui.on_brain_change   = lambda: self.request_reconnect(
+            keep_context=True, reason="new settings")
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
 
@@ -659,6 +770,12 @@ class JarvisLive:
         self.ui.on_wake_toggle   = self._ui_wake_toggle   # (enable: bool) -> str
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
+
+        # The switchboard the scheduler, Telegram bridge, face presence and
+        # skill manager use to reach whichever engine is running.
+        from core import runtime as _runtime
+        _runtime.set_engine(self)
+        self.engine_kind = getattr(self, "engine_kind", "gemini_live")
 
     # ── Wake word: state machine ─────────────────────────────────────────────
 
@@ -791,6 +908,20 @@ class JarvisLive:
         if loop and ev is not None:
             loop.call_soon_threadsafe(ev.set)
 
+    def reload_plugins(self) -> str:
+        """Re-scan plugins/ (a skill was just installed) and rebuild the session
+        so the model is told about the new tool — the conversation is kept."""
+        _base_dir = Path(__file__).resolve().parent
+        _core = {t["name"] for t in TOOL_DECLARATIONS} | self._action_registry.names()
+        self._plugin_registry = discover_plugins(
+            plugins_dir=_base_dir / "plugins", core_tool_names=_core,
+            logger=lambda msg: print(f"[Plugins] {msg}"),
+            notify=lambda msg: self.ui.write_log(f"SYS: {msg}"))
+        self.ui.get_plugins = self._plugin_registry.list_for_ui
+        self.ui.get_plugin_settings = self._plugin_registry.settings_schemas
+        self.request_reconnect(keep_context=True, reason="new skill")
+        return f"Plugins reloaded: {len(self._plugin_registry.get_tool_declarations())} active."
+
     def _on_voice_change(self):
         """Voice picker applied.
 
@@ -922,6 +1053,12 @@ class JarvisLive:
     def interrupt(self) -> None:
         """Stop JARVIS mid-speech: drain queued audio and open mic immediately."""
         self._interrupted = True
+        # Long-running tools (the computer agent) watch this to stop mid-task.
+        try:
+            from core import runtime as _rt
+            _rt.set_state("interrupt_at", time.monotonic())
+        except Exception:
+            pass
         q = self.audio_in_queue
         if q:
             drained = 0
@@ -1007,7 +1144,8 @@ class JarvisLive:
         # and this follows without anyone editing a prompt.
         _all_decls = (TOOL_DECLARATIONS
                       + self._action_registry.get_tool_declarations()
-                      + self._plugin_registry.get_tool_declarations())
+                      + self._plugin_registry.get_tool_declarations()
+                      + _mcp_declarations())
         _names = {(d.get("name") if isinstance(d, dict) else getattr(d, "name", ""))
                   for d in _all_decls}
         sys_prompt = _render_prompt(sys_prompt, {
@@ -1263,6 +1401,10 @@ class JarvisLive:
                         lambda: self._plugin_registry.run(name, args, player=self.ui, session_memory=None)
                     )
                     result = r or "Done."
+                elif _mcp_has(name):
+                    from core import mcp_client
+                    result = await loop.run_in_executor(
+                        None, lambda: mcp_client.manager().call(name, args))
                 else:
                     result = f"Unknown tool: {name}"
 
@@ -1305,6 +1447,34 @@ class JarvisLive:
                     mime_type=msg.get("mime_type", "audio/pcm"),
                 )
             )
+
+    async def _stream_live_video(self):
+        """Live vision with Gemini Live: send the webcam as video, a frame every
+        few seconds, so the realtime model sees what is in front of it."""
+        from core import brain_config, perception
+        per = perception.perception()
+        while not getattr(self, "_live_video_refused", False):
+            senses = brain_config.get_senses()
+            period = max(1.0, float(senses.get("live_video_seconds", 3) or 3))
+            await asyncio.sleep(period)
+            if not senses.get("live_vision") or not per.running() or self.session is None:
+                continue
+            jpeg = await asyncio.to_thread(per.latest_jpeg, 640, 70)
+            if not jpeg:
+                continue
+            try:
+                await self.session.send_realtime_input(
+                    video=types.Blob(data=jpeg, mime_type="image/jpeg"))
+            except Exception as e:
+                # Not for this model: stop trying for the rest of the run rather
+                # than risk a reconnect loop. Live vision's scene summaries and
+                # the vision tool still work.
+                self._live_video_refused = True
+                print(f"[Vision] live video not accepted by this session: {e}")
+                self.ui.write_log("SYS: This Gemini Live model does not take video — live vision "
+                                  "continues through descriptions.")
+        while True:
+            await asyncio.sleep(3600)
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -1543,10 +1713,13 @@ class JarvisLive:
                                 continue
 
                             full_in = " ".join(in_buf).strip()
+                            if full_in and self._voice_confirm_check(full_in):
+                                full_in = ""
                             if full_in:
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+                                _journal_append("user", full_in, True)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
@@ -1566,6 +1739,8 @@ class JarvisLive:
                                 self._last_out_logged = full_out
                                 self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
+                                _journal_append(self._asst_name, full_out, None)
+                                _emit_assistant_text(full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "jarvis",
@@ -1642,6 +1817,11 @@ class JarvisLive:
         except Exception:
             pass
 
+        # The assistant's own volume, 0–200 % (⚙ → AI BRAIN & VOICE, or "speak
+        # louder"). Applied here so both engines and every voice get it.
+        from core import audio_fx
+        _limiter = audio_fx.VoiceLimiter(RECEIVE_SAMPLE_RATE)
+
         try:
             while True:
                 try:
@@ -1675,6 +1855,13 @@ class JarvisLive:
                 # own voice. The batch is up to 200 ms long, so we hand over a
                 # *schedule* of 20 ms viseme frames instead of a single averaged
                 # level and let the HUD play it out in step with the audio.
+                _pct = audio_fx.volume_percent()
+                try:
+                    out_pcm = _limiter.process(bytes(batch), _pct)
+                except Exception:
+                    out_pcm = np.frombuffer(bytes(batch), dtype=np.int16)
+                _gain = min(1.0, _pct / 100.0) if _pct < 100 else 1.0
+
                 try:
                     pcm = np.frombuffer(bytes(batch), dtype=np.int16)
                     hop = _VIS_HOP / RECEIVE_SAMPLE_RATE
@@ -1710,19 +1897,19 @@ class JarvisLive:
                         self.ui.push_visemes(frames, hop, at)
                         # Barge-in needs to know what we are playing, not just
                         # how loud: the guard subtracts this from the microphone.
-                        self._out_level = max(f[0] for f in frames)
-                        self._echo.note_output(pcm, RECEIVE_SAMPLE_RATE,
+                        self._out_level = max(f[0] for f in frames) * _gain
+                        self._echo.note_output(out_pcm, RECEIVE_SAMPLE_RATE,
                                                self._out_level)
                     else:
                         lvl = _pcm_level(pcm)
                         self.ui.set_audio_level(lvl)
-                        self._out_level = lvl
-                        self._echo.note_output(pcm, RECEIVE_SAMPLE_RATE, lvl)
+                        self._out_level = lvl * _gain
+                        self._echo.note_output(out_pcm, RECEIVE_SAMPLE_RATE, self._out_level)
                 except Exception:
                     pass
 
                 try:
-                    await asyncio.to_thread(stream.write, bytes(batch))
+                    await asyncio.to_thread(stream.write, out_pcm.tobytes())
                 except (RuntimeError, asyncio.CancelledError):
                     break   # executor shutting down — exit cleanly
         except Exception as e:
@@ -2058,7 +2245,14 @@ class JarvisLive:
     async def run(self):
         self._loop = asyncio.get_event_loop()
         self._reconnect_event = asyncio.Event()
+        await self._start_services()
+        await self._connect_loop()
 
+    async def _start_services(self):
+        """Everything that is shared by both engines and lives for the whole
+        process: the confirmation gate, audio device enumeration, the phone
+        dashboard, and the long-running helpers added in this fork (MCP servers,
+        the Telegram bridge, face presence)."""
         # ── Wire the shared core services to the interface ───────────────────
         # The confirmation gate is useless without a way to ask, and a memory
         # trim is invisible without a way to say so. Both are bound once here
@@ -2091,6 +2285,68 @@ class JarvisLive:
             print(f"[Dashboard] Disabled: {e}")
             self._dashboard = None
 
+        # ── Extensions added by this fork: each is optional and off-thread ──
+        for _name, _starter in (("MCP", _start_mcp), ("Telegram", _start_telegram),
+                                ("Face presence", _start_face_presence),
+                                ("Live vision", _start_live_vision), ("CCTV", _start_cctv),
+                                ("Learning", _start_learning)):
+            try:
+                _starter(self)
+            except Exception as _e:
+                print(f"[{_name}] not started: {_e}")
+
+    async def _run_scheduler(self) -> None:
+        """Fire scheduled assistant tasks ("every morning at 8, read me my
+        calendar") while the app is running. Jobs live in memory/schedule.json
+        and are managed by the scheduled_tasks tool."""
+        from core import scheduler
+        while True:
+            await asyncio.sleep(20)
+            try:
+                due = await asyncio.to_thread(scheduler.due_jobs)
+            except Exception as e:
+                print(f"[Scheduler] {e}")
+                continue
+            for job in due:
+                if not self.session:
+                    break
+                prompt = (f"[SCHEDULED_TASK] The user scheduled this task earlier: "
+                          f"\"{job['task']}\". Do it now, using your tools as needed, and "
+                          f"tell the user briefly what you did.")
+                self.ui.write_log(f"SYS: Scheduled task — {job['task'][:80]}")
+                try:
+                    if self._wake_enabled and not self._awake:
+                        self.wake(reason="scheduled task")
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": prompt}]},
+                        turn_complete=True)
+                except Exception as e:
+                    print(f"[Scheduler] send failed: {e}")
+                await asyncio.sleep(5)
+
+    def _voice_confirm_check(self, heard: str) -> bool:
+        """A spoken 'confirm' / 'cancel' answers the on-screen gate. Decided by
+        the words the microphone heard, never by the model. True if consumed."""
+        try:
+            from core import attention, brain_config
+            if not brain_config.get_senses().get("voice_confirm", True):
+                return False
+            if not confirm_gate.pending_title():
+                return False
+            # Our own last sentence coming back through the speakers ("say
+            # confirm on screen…") must never count as the user's answer.
+            if attention.is_self_echo(heard, [self._last_out_logged or ""]):
+                return False
+            ans = attention.confirm_answer(heard)
+            if ans is None:
+                return False
+            self.ui.write_log(f"You: {heard}")
+            confirm_gate.resolve(ans)
+            return True
+        except Exception:
+            return False
+
+    async def _connect_loop(self):
         while True:
             try:
                 print("[JARVIS] Connecting...")
@@ -2156,6 +2412,7 @@ class JarvisLive:
                     self._reconnect_event.clear()  # ignore requests from before this session
                     tg.create_task(self._watch_reconnect())
                     tg.create_task(self._send_realtime())
+                    tg.create_task(self._stream_live_video())
                     tg.create_task(self._listen_audio())
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
@@ -2163,6 +2420,7 @@ class JarvisLive:
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    tg.create_task(self._run_scheduler())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
@@ -2304,16 +2562,53 @@ class JarvisLive:
             print(f"[JARVIS] Reconnecting in {delay}s...")
             await asyncio.sleep(delay)
 
+def _single_instance() -> bool:
+    """False when another JARVIS is already running (Windows). Two copies would
+    fight over the microphone, the camera and the dashboard port."""
+    if _platform.system() != "Windows":
+        return True
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        global _INSTANCE_MUTEX
+        _INSTANCE_MUTEX = k32.CreateMutexW(None, False, "Local\\JARVIS-Assistant")
+        if k32.GetLastError() == 183:          # ERROR_ALREADY_EXISTS
+            ctypes.windll.user32.MessageBoxW(
+                None, "JARVIS is already running — look for it on the taskbar.", "JARVIS", 0x40)
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def main():
+    if "--selftest" in sys.argv:
+        import selftest
+        sys.exit(selftest.main())
+    if not _single_instance():
+        return
     ui = JarvisUI("face.png")
 
     def runner():
         ui.wait_for_api_key()
-        jarvis = JarvisLive(ui)
+        from core import brain_config
+        brain_config.ensure_os_field()
+        if brain_config.uses_local_engine():
+            from core.local_engine import LocalEngineMixin
+
+            class LocalJarvis(LocalEngineMixin, JarvisLive):
+                INLINE_TOOLS = TOOL_DECLARATIONS
+
+            jarvis = LocalJarvis(ui)
+        else:
+            jarvis = JarvisLive(ui)
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
             print("\n🔴 Shutting down...")
+        except Exception as e:
+            traceback.print_exc()
+            ui.write_log(f"ERR: The assistant stopped — {type(e).__name__}: {str(e)[:200]}")
 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
