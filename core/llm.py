@@ -78,6 +78,7 @@ class Settings:
     tool_mode: str = "auto"
     compact_tools: bool = True
     max_tokens: int = 700
+    options: dict = field(default_factory=dict)     # extra Ollama options, e.g. {"num_gpu": 0}
 
 
 def settings_for(role: str = "chat", model: str | None = None) -> Settings:
@@ -182,7 +183,7 @@ def _raise_for(resp: requests.Response, provider: str) -> None:
 # ── capability detection ─────────────────────────────────────────────────────
 
 _VISION_HINTS = ("vision", "-vl", "vl:", "vl-", "llava", "bakllava", "moondream",
-                 "minicpm-v", "gemma3", "gemma-3", "llama3.2-vision", "pixtral",
+                 "minicpm-v", "gemma3", "gemma-3", "gemma4", "gemma-4", "llama3.2-vision", "pixtral",
                  "qwen2.5vl", "qwen2.5-vl", "qwen3-vl", "granite3.2-vision", "gpt-4o",
                  "gpt-4.1", "gpt-5", "claude", "gemini", "mistral-small3.1",
                  "mistral-small3.2", "llama4", "internvl", "phi-4-multimodal",
@@ -596,12 +597,58 @@ def _loads_loose(raw: str):
         return None
 
 
+_G4_CALL = re.compile(r"<\|tool_call>\s*call:([A-Za-z0-9_.-]+)\s*(\{.*?\})\s*<tool_call\|>", re.S)
+_G4_STR = '<|"|>'
+
+
+def _gemma4_args(body: str) -> dict:
+    """Gemma 4's call syntax — {key:<|"|>text<|"|>,n:5,flag:true} — as a dict."""
+    strings: list[str] = []
+
+    def keep(m):
+        strings.append(m.group(1))
+        return f'"@@G4S{len(strings) - 1}@@"'
+    body = re.sub(re.escape(_G4_STR) + r"(.*?)" + re.escape(_G4_STR), keep, body, flags=re.S)
+    body = re.sub(r'([{,]\s*)([A-Za-z_][\w-]*)\s*:', r'\1"\2":', body)
+    try:
+        data = json.loads(body)
+    except Exception:
+        data = _loads_loose(body)
+    if not isinstance(data, dict):
+        return {}
+
+    def restore(v):
+        if isinstance(v, str):
+            m = re.fullmatch(r"@@G4S(\d+)@@", v)
+            return strings[int(m.group(1))] if m else v
+        if isinstance(v, list):
+            return [restore(x) for x in v]
+        if isinstance(v, dict):
+            return {k: restore(x) for k, x in v.items()}
+        return v
+    return {k: restore(v) for k, v in data.items()}
+
+
+def _gemma4_calls(text: str, known: set[str] | None) -> tuple[list[ToolCall], str]:
+    calls = []
+    for m in _G4_CALL.finditer(text):
+        name = m.group(1)
+        if known is not None and name not in known:
+            continue
+        calls.append(ToolCall(name=name, arguments=_gemma4_args(m.group(2)), id=_new_id()))
+    if calls:
+        text = _G4_CALL.sub(" ", text)
+    return calls, text
+
+
 def parse_text_tool_calls(text: str, known: set[str] | None = None) -> tuple[list[ToolCall], str]:
     """Find tool calls written as text. Returns (calls, text with them removed).
 
     Accepts <tool_call>{...}</tool_call>, fenced JSON, and a bare JSON object
     carrying a "name" — the three shapes small models actually produce."""
     calls: list[ToolCall] = []
+    g4, text = _gemma4_calls(text or "", known)
+    calls.extend(g4)
     candidates: list[tuple[str, str]] = []   # (json, span to remove)
     for m in _TC_TAG.finditer(text or ""):
         candidates.append((m.group(1), m.group(0)))
@@ -668,7 +715,7 @@ def _stream_ollama(s: Settings, messages, tools, cancel, caps, max_tokens) -> It
         "model": s.model, "messages": _to_ollama(messages), "stream": True,
         "keep_alive": s.keep_alive,
         "options": {"num_ctx": s.num_ctx, "temperature": s.temperature,
-                    "num_predict": max_tokens},
+                    "num_predict": max_tokens, **(s.options or {})},
     }
     if tools:
         payload["tools"] = tools
@@ -956,18 +1003,34 @@ def chat(messages: list[dict], declarations=None, s: Settings | None = None,
     return final
 
 
-_THINK = re.compile(r"<think>.*?</think>", re.S | re.I)
+_gpu_cache: dict = {}
+
+
+def _small_gpu() -> bool:
+    """Under 8 GB of VRAM: two models do not fit at once."""
+    if "v" not in _gpu_cache:
+        try:
+            vram = brain_config.detect_hardware().get("vram_gb") or 0
+        except Exception:
+            vram = 0
+        _gpu_cache["v"] = vram < 8
+    return _gpu_cache["v"]
+
+
+_THINK = re.compile(r"<think>.*?</think>|<\|channel>.*?<channel\|>", re.S | re.I)
 
 
 def strip_thinking(text: str) -> str:
     text = _THINK.sub("", text or "")
     if "</think>" in text.lower():
         text = re.split(r"</think>", text, flags=re.I)[-1]
+    if "<channel|>" in text:
+        text = text.split("<channel|>")[-1]
     return text.strip()
 
 
 def complete(contents, system: str = "", role: str = "smart", model: str | None = None,
-             max_tokens: int = 1500, timeout: float | None = None) -> str:
+             max_tokens: int = 1500, timeout: float | None = None, background: bool = False) -> str:
     """One-shot generation for side calls (summaries, code, JSON, vision).
 
     `contents` may be a string, or a list mixing strings and image parts as
@@ -1000,6 +1063,12 @@ def complete(contents, system: str = "", role: str = "smart", model: str | None 
         vis = brain_config.model_for("vision")
         if vis:
             s.model = vis
+    if background and s.provider == "ollama" and s.model != brain_config.model_for("chat"):
+        # A background look (live vision, CCTV) with a separate vision model:
+        # run it on the CPU so the conversation model keeps the GPU and does
+        # not have to be reloaded before the next reply.
+        if _small_gpu():
+            s.options = dict(s.options or {}, num_gpu=0)
     if timeout:
         s.timeout = timeout
     msgs: list[dict] = []

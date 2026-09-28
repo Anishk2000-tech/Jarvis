@@ -73,3 +73,9 @@ logs/
 downloads/
 screenshots/
 uploads/
+# What the assistant learned and saw (personal, local only)
+memory/knowledge.jsonl
+memory/knowledge_state.json
+memory/knowledge_emb.npz
+memory/cctv.json
+memory/cctv_events/

@@ -52,7 +52,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from core import attention, brain_config, journal, llm, runtime
+from core import attention, brain_config, journal, knowledge, llm, runtime, websearch
 from core import confirm as confirm_gate
 from core.speech_text import SpeechStream, visible_text
 from core.stt_engine import create_stt, is_hallucination, normalize_lang
@@ -66,7 +66,7 @@ _SLICE = 2400                   # bytes per queued audio slice (50 ms at 24 kHz)
 # acknowledgement is needed before them.
 _INSTANT_TOOLS = {"save_memory", "recall_memory", "undo", "close_camera", "system_status",
                   "computer_settings", "conversation_log", "open_app", "screen_process",
-                  "manage_monitor", "face_id", "weather_report"}
+                  "manage_monitor", "face_id", "weather_report", "knowledge"}
 
 _ACKS = {
     "en": ["On it.", "Right away.", "One moment.", "Working on it.", "Give me a second."],
@@ -76,6 +76,16 @@ _ACKS = {
     "pt": ["Um momento.", "Já vou."], "it": ["Un attimo.", "Subito."],
     "ru": ["Секунду.", "Сейчас."], "ar": ["لحظة من فضلك."], "ja": ["少々お待ちください。"],
 }
+
+# Said while the web is being searched, so the pause is not silence.
+_SEARCH_ACKS = {
+    "en": ["Let me check.", "Checking online.", "Let me look that up.", "One moment, searching."],
+    "hi": ["एक सेकंड, देखता हूँ।", "ऑनलाइन चेक करता हूँ।"],
+    "es": ["Déjame comprobarlo."], "fr": ["Je vérifie."], "de": ["Ich schaue kurz nach."],
+    "tr": ["Hemen bakıyorum."], "pt": ["Deixa-me verificar."], "it": ["Controllo subito."],
+    "ru": ["Сейчас проверю."], "ar": ["دعني أتحقق."], "ja": ["調べてみます。"],
+}
+_SILENT = ("silent", "[silent]", "(silent)", "silence", "none", "nothing", "no remark", "—", "-")
 
 
 def _level(samples) -> float:
@@ -97,6 +107,7 @@ class Request:
     source: str = "voice"            # voice | typed | system | remote
     images: list = field(default_factory=list)
     lang: str = ""
+    ts: float = field(default_factory=time.monotonic)
 
 
 class LocalSession:
@@ -205,6 +216,14 @@ class LocalEngineMixin:
             loop.call_soon_threadsafe(self._req_q.put_nowait, req)
         except RuntimeError:
             pass
+
+    def _submit_vision_event(self, text: str, jpeg: bytes | None = None) -> None:
+        """Live vision noticed something (core/perception.py). The brain may
+        remark on it, or stay silent."""
+        if self._busy or self._is_speaking or (self._wake_enabled and not self._awake):
+            return
+        images = [llm.image_part(jpeg, "image/jpeg")] if jpeg else []
+        self._submit(text, images=images, source="vision")
 
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
@@ -697,7 +716,7 @@ class LocalEngineMixin:
             return False
 
     # ── the brain ────────────────────────────────────────────────────────────
-    def _system_prompt(self) -> str:
+    def _system_prompt(self, query: str = "") -> str:
         from main import _describe_limits, _render_prompt   # noqa: PLC0415
         from memory.memory_manager import format_memory_for_prompt, load_memory
         base = Path(__file__).resolve().parent
@@ -728,6 +747,16 @@ class LocalEngineMixin:
         except Exception:
             pass
         parts.append(body)
+        learned = knowledge.context_block(query) if query else knowledge.context_block("", k=0)
+        if learned:
+            parts.append(learned)
+        try:
+            from core import perception
+            seen = perception.perception().context_block()
+            if seen:
+                parts.append(seen)
+        except Exception:
+            pass
         if self._earlier:
             parts.append("[EARLIER IN THIS CONVERSATION]\n" + self._earlier)
         return "\n\n".join(parts)
@@ -832,6 +861,8 @@ class LocalEngineMixin:
     async def _run_turn(self, req: Request) -> None:
         if not req.text and not req.images:
             return
+        if req.source == "vision" and (time.monotonic() - req.ts > 20 or self._is_speaking):
+            return                      # a stale sight is not worth remarking on
         self._busy = True
         self._cancel.clear()
         self._turn_id += 1
@@ -839,9 +870,13 @@ class LocalEngineMixin:
         self._visemes.reset()
         if self._turn_done_event is not None:
             self._turn_done_event.clear()
-        self.ui.set_state("THINKING")
+        if req.source != "vision":
+            self.ui.set_state("THINKING")
         try:
-            final = await asyncio.to_thread(self._agent_turn, req, tid)
+            if req.source == "vision":
+                final = await asyncio.to_thread(self._vision_remark, req, tid)
+            else:
+                final = await asyncio.to_thread(self._agent_turn, req, tid)
         except Exception as e:
             traceback.print_exc()
             final = ""
@@ -891,14 +926,37 @@ class LocalEngineMixin:
         decls = self._all_tool_decls()
         params_by_name = {d.get("name"): d.get("parameters") for d in decls}
         now = datetime.now().strftime("%H:%M")
-        user_msg: dict = {"role": "user", "content": f"{req.text}\n\n(time now {now})"
-                          if req.source in ("voice", "typed") else req.text}
-        if req.images:
-            user_msg["images"] = req.images
+        spoken_all: list[str] = []
+        from_user = req.source in ("voice", "typed", "remote")
+        content = f"{req.text}\n\n(time now {now})" if from_user else req.text
+        images = list(req.images)
+        search_cfg = brain_config.get_search_cfg()
+        auto_search = bool(search_cfg.get("auto_search", True)) and from_user
+        searched = False
+
+        # Eyes: a visual question gets the live webcam frame.
+        if from_user and not images:
+            extra, imgs = self._live_view_for(req.text, s)
+            if imgs:
+                images = imgs
+                content = "[IMAGE SOURCE: WEBCAM, live — what you see right now]\n" + content
+            elif extra:
+                content += "\n\n" + extra
+
+        # A question about the present: look it up before answering, so the
+        # model never has to guess about things that happened after training.
+        if auto_search and websearch.needs_fresh_info(req.text):
+            searched = True
+            results = self._web_lookup(req.text, tid, spoken_all)
+            if results:
+                content += ("\n\n" + results)
+
+        user_msg: dict = {"role": "user", "content": content}
+        if images:
+            user_msg["images"] = images
         with self._hist_lock:
             self._history.append(user_msg)
         self._trim_history(s.num_ctx)
-        spoken_all: list[str] = []
         self._turn_shown = []
         acked = False
         max_steps = int(b.get("max_steps", 10))
@@ -908,13 +966,19 @@ class LocalEngineMixin:
             if tid != self._turn_id or self._cancel.is_set():
                 return " ".join(spoken_all)
             with self._hist_lock:
-                msgs = [{"role": "system", "content": self._system_prompt()}] + list(self._history)
+                msgs = [{"role": "system", "content": self._system_prompt(req.text)}] + list(self._history)
             stream = SpeechStream()
             final_ev = None
+            unsure = False
             try:
                 for ev in llm.stream_chat(msgs, decls, s=s, cancel=self._cancel):
                     if ev.kind == "text":
                         for sentence in stream.feed(ev.text):
+                            if unsure:
+                                continue
+                            if auto_search and not searched and websearch.sounds_unsure(sentence):
+                                unsure = True       # hold it back: we will look it up instead
+                                continue
                             spoken_all.append(sentence)
                             self._speak(sentence, tid)
                     else:
@@ -936,19 +1000,42 @@ class LocalEngineMixin:
                     if self._history and self._history[-1] is user_msg:
                         self._history.pop()
                 return msg
+            tail = stream.flush()
+            if not unsure and auto_search and not searched and any(websearch.sounds_unsure(t) for t in tail):
+                unsure = True
             if final_ev is None or final_ev.cancelled:
-                for sentence in stream.flush():
+                if not unsure:
+                    for sentence in tail:
+                        spoken_all.append(sentence)
+                        self._speak(sentence, tid)
+                return " ".join(spoken_all)
+            if not unsure:
+                for sentence in tail:
                     spoken_all.append(sentence)
                     self._speak(sentence, tid)
-                return " ".join(spoken_all)
-            for sentence in stream.flush():
-                spoken_all.append(sentence)
-                self._speak(sentence, tid)
 
             text = llm.strip_thinking(visible_text(final_ev.text))
+            calls = final_ev.tool_calls
+            if not calls and (unsure or (auto_search and not searched and websearch.sounds_unsure(text))):
+                # The model does not know. Instead of passing that on, search
+                # and let it answer again from what the web says.
+                searched = True
+                results = self._web_lookup(req.text, tid, spoken_all)
+                if results:
+                    with self._hist_lock:
+                        self._history.append({"role": "user", "content": (
+                            results + "\n\nYou did not know this from memory, so it was looked up for "
+                            "you. Now answer the user's last question from these results, briefly, "
+                            "without mentioning that you did not know.")})
+                    continue
+                # Nothing came back from the web: say what the model said after all.
+                ss = SpeechStream()
+                for sentence in ss.feed(text + "\n") + ss.flush():
+                    if sentence not in spoken_all:
+                        spoken_all.append(sentence)
+                        self._speak(sentence, tid)
             if text:
                 self._turn_shown.append(text)
-            calls = final_ev.tool_calls
             with self._hist_lock:
                 self._history.append({"role": "assistant", "content": text,
                                       "tool_calls": [c.as_dict() for c in calls]} if calls
@@ -971,6 +1058,9 @@ class LocalEngineMixin:
                     result = (f"There is no tool named '{call.name}'. Use one of the listed tools.")
                 else:
                     result = self._run_tool(call.name, args, call.id)
+                    knowledge.note_tool_result(call.name, args, str(result))
+                if call.name == "web_search":
+                    searched = True
                 extra_user = None
                 if call.name == "screen_process" and self._pending_vision:
                     result, extra_user = self._resolve_vision(s)
@@ -985,6 +1075,95 @@ class LocalEngineMixin:
         self._speak("I've stopped there — that took more steps than I allow myself. "
                     "Tell me if you want me to continue.", tid)
         return " ".join(spoken_all)
+
+    def _web_lookup(self, query: str, tid: int, spoken_all: list) -> str:
+        """Say a short 'let me check', search, return the [WEB_RESULTS] block."""
+        lang = self._last_lang if self._last_lang in _SEARCH_ACKS else "en"
+        ack = random.choice(_SEARCH_ACKS[lang])
+        spoken_all.append(ack)
+        self._speak(ack, tid)
+        self.ui.write_log(f"SYS: 🔎 Searching the web: {query[:80]}")
+        try:
+            return websearch.research(query, "search", deadline=12.0)
+        except Exception as e:
+            print(f"[Local] web lookup failed: {e}")
+            return ""
+
+    def _live_view_for(self, text: str, s: llm.Settings) -> tuple[str, list]:
+        """For a visual question while live vision is on: the current frame
+        (if the brain can see) or a description of it from the vision model."""
+        senses = brain_config.get_senses()
+        if not senses.get("live_vision") or not senses.get("vision_attach", True):
+            return "", []
+        try:
+            from core import perception
+            per = perception.perception()
+            if not per.running() or not perception.wants_camera(text):
+                return "", []
+            jpeg = per.latest_jpeg(max_side=768)
+            if not jpeg:
+                return "", []
+            part = llm.image_part(jpeg, "image/jpeg")
+            caps = llm.capabilities(s)
+            vision_model = brain_config.get_brain().get("vision_model") or ""
+            if caps.get("vision") and (not vision_model or vision_model == s.model):
+                return "", [part]
+            if perception._can_see():
+                desc = llm.complete([f"[IMAGE SOURCE: WEBCAM] The user asks: {text}\nDescribe precisely "
+                                     "what in this frame is relevant to the question.", part],
+                                    role="vision", max_tokens=250, timeout=90)
+                if desc:
+                    return f"[LIVE CAMERA VIEW — described by your vision model]\n{desc}", []
+            cap = per.scene.caption
+            summary = per.scene.summary()
+            return (f"[LIVE CAMERA VIEW — detections only; no model that can see images is set]\n"
+                    f"{summary}" + (f"\nLast description: {cap}" if cap else "")), []
+        except Exception as e:
+            print(f"[Local] live view failed: {e}")
+            return "", []
+
+    def _vision_remark(self, req: Request, tid: int) -> str:
+        """Something was seen: say one natural sentence about it — or nothing."""
+        s = llm.settings_for("chat")
+        content = req.text
+        images = []
+        try:
+            caps = llm.capabilities(s)
+            if req.images and caps.get("vision"):
+                images = req.images
+            else:
+                from core import perception
+                sc = perception.perception().scene
+                content += f"\nWhat your camera shows: {sc.summary()}"
+        except Exception:
+            pass
+        with self._hist_lock:
+            recent = [m for m in self._history[-6:] if m.get("role") in ("user", "assistant")
+                      and not m.get("tool_calls")]
+        msg: dict = {"role": "user", "content": content}
+        if images:
+            msg["images"] = images
+        msgs = [{"role": "system", "content": self._system_prompt(req.text)}] + \
+            [{"role": m["role"], "content": str(m.get("content", ""))} for m in recent] + [msg]
+        try:
+            ev = llm.chat(msgs, None, s=s, cancel=self._cancel, max_tokens=90)
+        except Exception as e:
+            print(f"[Local] vision remark failed: {e}")
+            return ""
+        text = llm.strip_thinking(visible_text(ev.text)).strip()
+        low = text.lower().strip(" .!\"'")
+        if (ev.cancelled or not text or low in _SILENT or low.startswith("silent")
+                or tid != self._turn_id or self._cancel.is_set()):
+            return ""
+        stream = SpeechStream()
+        out = []
+        for sentence in stream.feed(text + "\n") + stream.flush():
+            out.append(sentence)
+            self._speak(sentence, tid)
+        with self._hist_lock:
+            self._history.append({"role": "user", "content": req.text})
+            self._history.append({"role": "assistant", "content": text})
+        return " ".join(out) or text
 
     def _run_tool(self, name: str, args: dict, call_id: str) -> str:
         if name == "shutdown_jarvis":

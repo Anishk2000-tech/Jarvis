@@ -94,6 +94,8 @@ DEFAULT_MODELS = {
 # layers between the GPU and system RAM, it is just slower.
 OLLAMA_RECOMMENDED = [
     # (model, role, approx size GB, note)
+    ("gemma4:e4b",        "smart",  9.6, "Sees AND uses tools in one model — ideal for live vision; GPU+RAM split"),
+    ("gemma4:e2b",        "fast",   7.2, "Smaller Gemma 4: sees and uses tools, quick on the CPU"),
     ("qwen2.5:3b",        "fast",   1.9, "Fits fully in 4 GB VRAM — the snappiest voice replies"),
     ("llama3.2:3b",       "fast",   2.0, "Fits in 4 GB VRAM — good English conversation"),
     ("qwen3:4b",          "fast",   2.6, "Fits in 4 GB VRAM — strong tool use for its size"),
@@ -138,6 +140,7 @@ _DEFAULT_VOICE = {
     "tts_engine": "edge",          # edge | sapi | piper | kokoro | elevenlabs | openai
     "tts_voice": "en-GB-RyanNeural",
     "tts_rate": 0,                 # percent, -50..+50
+    "voice_volume": 100,           # percent, 0..200 — above 100 is a limited boost
     "piper_voice": "en_GB-alan-medium",
     "kokoro_voice": "bm_george",
     "elevenlabs_api_key": "",
@@ -162,6 +165,40 @@ _DEFAULT_SENSES = {
     "greet_on_arrival": True,
     "lock_on_leave": False,
     "alert_unknown_faces": False,
+    # Live vision: the webcam stays on and the assistant keeps looking.
+    "live_vision": False,
+    "vision_fps": 2,               # detection passes per second (CPU)
+    "vision_proactive": "low",     # off | low | normal | chatty — speaking up unasked
+    "vision_captions": True,       # let the vision model describe the scene on changes
+    "vision_caption_seconds": 60,  # at most one description per this many seconds
+    "vision_preview": True,        # small live view with boxes in the HUD corner
+    "vision_attach": True,         # attach the live frame to visual questions
+    "live_video_seconds": 3,       # Gemini Live: send a frame this often
+}
+
+_DEFAULT_SEARCH = {
+    "provider": "auto",            # auto | duckduckgo | tavily | brave | serper | searxng
+    "google_ai": True,             # Google's AI answer via Gemini grounding, when a Gemini key is set
+    "auto_search": True,           # search before time-sensitive questions / when the model is unsure
+    "read_pages": True,            # open the top results and read them
+    "pages": 3,
+    "region": "auto",              # e.g. in-en, us-en, uk-en; auto = from Windows
+    "tavily_key": "",
+    "brave_key": "",
+    "serper_key": "",
+    "searxng_url": "",
+}
+
+_DEFAULT_LEARNING = {
+    "enabled": True,               # distil lasting facts from what it sees, hears and does
+    "from_room": True,             # ambient conversation it overhears
+    "from_camera": True,           # live vision and CCTV descriptions
+    "from_screen": True,           # which apps and windows are in use (titles only)
+    "from_tools": True,            # which actions worked or failed, and why
+    "screen_seconds": 60,          # how often the active window is noted
+    "consolidate_minutes": 10,     # how often the notes are distilled (only when idle)
+    "max_facts": 4000,
+    "embed_model": "",             # optional Ollama embedding model, e.g. nomic-embed-text
 }
 
 
@@ -280,20 +317,24 @@ def recommend(hw: dict | None = None) -> dict:
     """Ollama models that suit this machine, with a sentence explaining why."""
     hw = hw or detect_hardware()
     ram, vram = hw.get("ram_gb") or 0, hw.get("vram_gb") or 0
+    # Gemma 4 E4B sees and calls tools in ONE model: live vision, screen reading
+    # and conversation never make the GPU swap models, which on a small card
+    # costs more time than anything else.
     if vram >= 10:
-        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:14b", "vision_model": "qwen2.5vl:7b",
-             "why": "Your GPU holds 7B models completely — fast and capable."}
+        r = {"model": "gemma4:e4b", "smart_model": "qwen2.5:14b", "vision_model": "",
+             "why": "Your GPU holds gemma4:e4b completely — fast, and it sees and uses tools itself."}
     elif vram >= 6:
-        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:3b",
-             "why": "A 7B model fits your GPU: good tool use at conversational speed."}
+        r = {"model": "gemma4:e4b", "smart_model": "", "vision_model": "",
+             "why": "gemma4:e4b mostly fits your GPU: one model that talks, sees and uses tools."}
     elif vram >= 3.5:
-        r = {"model": "qwen2.5:7b", "smart_model": "qwen2.5:7b", "vision_model": "qwen2.5vl:3b",
-             "why": (f"{vram:.0f} GB GPU + {ram:.0f} GB RAM: qwen2.5:7b splits between GPU and RAM — "
-                     "reliable with tools, a few seconds per reply. For the fastest replies pick "
-                     "qwen2.5:3b (runs fully on the GPU).")}
+        r = {"model": "gemma4:e4b", "smart_model": "", "vision_model": "",
+             "why": (f"{vram:.0f} GB GPU + {ram:.0f} GB RAM: gemma4:e4b splits between GPU and RAM and "
+                     "sees and uses tools in one model — best for live vision and CCTV. Alternatives: "
+                     "qwen2.5:7b (most dependable tool use; add qwen2.5vl:3b as vision model) or "
+                     "qwen2.5:3b (fastest replies, fits the GPU).")}
     elif ram >= 15:
-        r = {"model": "qwen2.5:3b", "smart_model": "qwen2.5:7b", "vision_model": "moondream",
-             "why": "No usable GPU: a 3B model keeps voice replies quick on the CPU; 7B for long tasks."}
+        r = {"model": "gemma4:e2b", "smart_model": "qwen2.5:7b", "vision_model": "",
+             "why": "No usable GPU: gemma4:e2b is quick on the CPU and can see; qwen2.5:3b is an alternative."}
     else:
         r = {"model": "qwen2.5:1.5b", "smart_model": "qwen2.5:3b", "vision_model": "moondream",
              "why": "Limited memory: small models only. A cloud brain (Groq, Gemini) will feel faster."}
@@ -349,6 +390,10 @@ def get_voice_cfg() -> dict:
     except (TypeError, ValueError):
         v["tts_rate"] = 0
     try:
+        v["voice_volume"] = max(0, min(200, int(round(float(v.get("voice_volume", 100))))))
+    except (TypeError, ValueError):
+        v["voice_volume"] = 100
+    try:
         v["end_silence_ms"] = max(250, min(3000, int(v.get("end_silence_ms") or 700)))
     except (TypeError, ValueError):
         v["end_silence_ms"] = 700
@@ -371,11 +416,48 @@ def get_senses() -> dict:
         s["listen_mode"] = "active"
     if not isinstance(s.get("name_aliases"), list):
         s["name_aliases"] = []
+    if str(s.get("vision_proactive") or "").lower() not in ("off", "low", "normal", "chatty"):
+        s["vision_proactive"] = "low"
     return s
 
 
 def save_senses(updates: dict) -> None:
     _save_section("senses", updates)
+
+
+# ── web search ───────────────────────────────────────────────────────────────
+
+def get_search_cfg() -> dict:
+    c = _section("search", _DEFAULT_SEARCH)
+    if str(c.get("provider") or "").lower() not in ("auto", "duckduckgo", "tavily", "brave", "serper",
+                                                   "searxng", "google_ai"):
+        c["provider"] = "auto"
+    try:
+        c["pages"] = max(0, min(6, int(c.get("pages", 3))))
+    except (TypeError, ValueError):
+        c["pages"] = 3
+    return c
+
+
+def save_search_cfg(updates: dict) -> None:
+    _save_section("search", updates)
+
+
+# ── learning ─────────────────────────────────────────────────────────────────
+
+def get_learning_cfg() -> dict:
+    c = _section("learning", _DEFAULT_LEARNING)
+    for k, lo, hi, d in (("screen_seconds", 15, 3600, 60), ("consolidate_minutes", 2, 240, 10),
+                         ("max_facts", 200, 50000, 4000)):
+        try:
+            c[k] = max(lo, min(hi, int(c.get(k, d))))
+        except (TypeError, ValueError):
+            c[k] = d
+    return c
+
+
+def save_learning_cfg(updates: dict) -> None:
+    _save_section("learning", updates)
 
 
 def assistant_name() -> str:

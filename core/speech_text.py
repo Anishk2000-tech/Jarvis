@@ -26,9 +26,13 @@ _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+", re.M)
 _HEADER = re.compile(r"^\s*#{1,6}\s*", re.M)
 _EMOJI = re.compile("[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0001F000-\U0001F2FF]")
 
-_OPENERS = ("<think>", "<tool_call>", "```", "<tool_result")
+# Gemma 4 writes its reasoning as <|channel>thought…<channel|> and raw calls as
+# <|tool_call>call:name{…}<tool_call|> when a server does not parse them.
+_OPENERS = ("<think>", "<tool_call>", "```", "<tool_result", "<|channel>", "<|tool_call>",
+            "<|tool_response>")
 _CLOSERS = {"<think>": "</think>", "<tool_call>": "</tool_call>", "```": "```",
-            "<tool_result": "</tool_result>"}
+            "<tool_result": "</tool_result>", "<|channel>": "<channel|>",
+            "<|tool_call>": "<tool_call|>", "<|tool_response>": "<tool_response|>"}
 
 
 def clean_for_speech(text: str) -> str:

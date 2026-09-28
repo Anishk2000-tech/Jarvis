@@ -55,7 +55,8 @@ def test_hallucination_filter():
 
 def test_recommendations_for_this_laptop():
     r = brain_config.recommend({"ram_gb": 32, "vram_gb": 4, "gpu": "GTX 1650", "cores": 6})
-    assert r["model"] == "qwen2.5:7b" and r["vision_model"] == "qwen2.5vl:3b" and "qwen2.5:3b" in r["why"]
-    assert brain_config.recommend({"ram_gb": 16, "vram_gb": 0})["model"] == "qwen2.5:3b"
+    assert r["model"] == "gemma4:e4b" and r["vision_model"] == "" and "qwen2.5:3b" in r["why"]
+    assert "qwen2.5vl:3b" in r["why"], "the two-model alternative is named"
+    assert brain_config.recommend({"ram_gb": 16, "vram_gb": 0})["model"] == "gemma4:e2b"
     assert brain_config.recommend({"ram_gb": 8, "vram_gb": 0})["model"] == "qwen2.5:1.5b"
     assert brain_config.recommend({"ram_gb": 64, "vram_gb": 12})["smart_model"] == "qwen2.5:14b"

@@ -21,7 +21,7 @@ import threading
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QSlider,
     QVBoxLayout, QWidget,
 )
 
@@ -201,6 +201,8 @@ class BrainSettingsOverlay(QWidget):
         self._line("elevenlabs_voice_id", v.get("elevenlabs_voice_id", ""), "ElevenLabs voice id")
         self._choice("tts_rate", "Speaking speed (%)", ["-20", "-10", "0", "10", "20", "30"],
                      str(v.get("tts_rate", 0)))
+        self._slider("voice_volume", "Voice volume (above 100% = boost, like VLC)", 0, 200,
+                     int(v.get("voice_volume", 100)), "%")
         tv_btn = self._btn("▶  TEST VOICE")
         tv_btn.clicked.connect(self._test_voice)
         self._form.addWidget(tv_btn)
@@ -221,6 +223,90 @@ class BrainSettingsOverlay(QWidget):
         self._toggle("lock_on_leave", "Lock the PC when I walk away", s.get("lock_on_leave", False))
         self._toggle("alert_unknown_faces", "Alert me about strangers at the PC", s.get("alert_unknown_faces", False))
 
+        # ── live vision ──────────────────────────────────────────────────────
+        self._section("LIVE VISION  (always-on webcam)")
+        self._form.addWidget(self._lbl(
+            "The webcam stays on: people, faces and objects are recognised on the CPU a few times a "
+            "second, and the vision model describes the scene when it changes. Best with a brain that "
+            "can see (gemma4:e4b, qwen2.5vl, gemma3) so no second model is loaded.", 8, color=C.TEXT_DIM))
+        self._toggle("live_vision", "Live vision on", s.get("live_vision", False))
+        self._choice("vision_proactive", "Speaks up about what it sees", ["off", "low", "normal", "chatty"],
+                     s.get("vision_proactive", "low"),
+                     labels={"off": "off — only when asked", "low": "low — greets people, notices strangers",
+                             "normal": "normal — also reacts to notable changes",
+                             "chatty": "chatty — also comments now and then"})
+        self._choice("vision_fps", "Looks per second (CPU)", ["1", "2", "3", "5"], str(s.get("vision_fps", 2)))
+        self._toggle("vision_captions", "Describe the scene with the vision model", s.get("vision_captions", True))
+        self._choice("vision_caption_seconds", "At most one description every (s)", ["30", "60", "120", "300"],
+                     str(s.get("vision_caption_seconds", 60)))
+        self._toggle("vision_attach", "Show it the live frame for visual questions", s.get("vision_attach", True))
+        self._toggle("vision_preview", "Small live view in the HUD", s.get("vision_preview", True))
+        self._choice("live_video_seconds", "Gemini Live: send a frame every (s)", ["2", "3", "5", "10"],
+                     str(s.get("live_video_seconds", 3)))
+
+        # ── cctv ─────────────────────────────────────────────────────────────
+        self._section("CCTV CAMERAS")
+        self._form.addWidget(self._lbl(
+            "WiFi / IP cameras (RTSP, ONVIF, MJPEG, Home Assistant). Home mode announces people by voice, "
+            "night and away modes send alerts with photos to Telegram.", 8, color=C.TEXT_DIM))
+        wall = self._btn("📹  OPEN CAMERA WALL — ADD / VIEW CAMERAS")
+        wall.clicked.connect(self._open_cctv)
+        self._form.addWidget(wall)
+
+        # ── web search ───────────────────────────────────────────────────────
+        sc = brain_config.get_search_cfg()
+        self._section("WEB SEARCH")
+        self._toggle("auto_search", "Look things up by itself (news, prices, anything it doesn't know)",
+                     sc.get("auto_search", True))
+        self._toggle("google_ai", "Include Google's AI answer (uses the Gemini key, free tier)",
+                     sc.get("google_ai", True))
+        self._choice("search_provider", "Search engine", ["auto", "duckduckgo", "tavily", "brave", "serper",
+                                                          "searxng"], sc.get("provider", "auto"),
+                     labels={"auto": "auto — several free engines at once",
+                             "duckduckgo": "free meta-search only",
+                             "tavily": "Tavily (AI answer, free key: tavily.com)",
+                             "brave": "Brave Search API (free key)",
+                             "serper": "Serper — Google results (free key: serper.dev)",
+                             "searxng": "SearXNG — your own search server"})
+        self._line("tavily_key", sc.get("tavily_key", ""), "Tavily API key", password=True)
+        self._line("brave_key", sc.get("brave_key", ""), "Brave Search API key", password=True)
+        self._line("serper_key", sc.get("serper_key", ""), "Serper API key", password=True)
+        self._line("searxng_url", sc.get("searxng_url", ""), "SearXNG address",
+                   placeholder="http://localhost:8888")
+        self._line("search_region", sc.get("region", "auto"), "Region (auto, in-en, us-en, uk-en…)")
+        self._toggle("read_pages", "Open and read the top pages", sc.get("read_pages", True))
+        self._w["search_provider"].currentIndexChanged.connect(lambda _i: self._on_search_provider())
+        self._on_search_provider()
+
+        # ── learning ─────────────────────────────────────────────────────────
+        lc = brain_config.get_learning_cfg()
+        self._section("LEARNING")
+        self._form.addWidget(self._lbl(
+            "While you are not talking to it, it distils what it saw, heard and did into lasting facts "
+            "(memory/knowledge.jsonl on this PC) and uses them in every conversation.", 8, color=C.TEXT_DIM))
+        self._toggle("learn_enabled", "Learn on its own", lc.get("enabled", True))
+        self._toggle("learn_room", "…from conversations it overhears", lc.get("from_room", True))
+        self._toggle("learn_camera", "…from what its cameras see", lc.get("from_camera", True))
+        self._toggle("learn_screen", "…from which apps and windows you use", lc.get("from_screen", True))
+        self._toggle("learn_tools", "…from which of its actions worked or failed", lc.get("from_tools", True))
+        self._choice("consolidate_minutes", "Think it over every (min)", ["5", "10", "20", "30", "60"],
+                     str(lc.get("consolidate_minutes", 10)))
+        self._line("embed_model", lc.get("embed_model", ""), "Embedding model for recall (optional, Ollama)",
+                   placeholder="e.g. nomic-embed-text")
+        lrow = QWidget()
+        ll = QHBoxLayout(lrow)
+        ll.setContentsMargins(0, 0, 0, 0)
+        ll.setSpacing(6)
+        show = self._btn("WHAT HAS IT LEARNED?")
+        show.clicked.connect(self._show_learned)
+        forget = self._btn("FORGET ALL LEARNED")
+        forget.clicked.connect(self._forget_learned)
+        ll.addWidget(show)
+        ll.addWidget(forget)
+        self._form.addWidget(lrow)
+        self._status["learn"] = self._lbl("", 8, color=C.TEXT_DIM)
+        self._form.addWidget(self._status["learn"])
+
         # ── integrations ─────────────────────────────────────────────────────
         self._section("REMOTE & EXTENSIONS")
         tg = {}
@@ -240,7 +326,7 @@ class BrainSettingsOverlay(QWidget):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        ok = self._btn("▸  INITIALISE SYSTEMS" if first_run else "▸  SAVE & APPLY", primary=True)
+        ok = self._btn("▸  INITIALISE SYSTEMS" if first_run else "▸  SAVE && APPLY", primary=True)
         ok.clicked.connect(self._save)
         row.addWidget(ok)
         if not first_run:
@@ -259,6 +345,9 @@ class BrainSettingsOverlay(QWidget):
         w = QLabel(txt)
         w.setAlignment(align)
         w.setWordWrap(True)
+        # Wrapped text in a scroll area: let the label grow to its wrapped
+        # height instead of being squeezed to the first lines.
+        w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         w.setFont(QFont(_FONT, fs, QFont.Weight.Bold if bold else QFont.Weight.Normal))
         w.setStyleSheet(f"color: {color or C.PRI}; background: transparent;")
         return w
@@ -346,6 +435,74 @@ class BrainSettingsOverlay(QWidget):
             btn.setStyleSheet(f"QPushButton {{ background: transparent; color: {C.TEXT_MED}; "
                               f"border: 1px solid {C.BORDER}; border-radius: 3px; }}")
 
+    def _slider(self, key, label, lo, hi, value, suffix=""):
+        box = QWidget()
+        lay = QHBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        sl = QSlider(Qt.Orientation.Horizontal)
+        sl.setRange(lo, hi)
+        sl.setSingleStep(5)
+        sl.setPageStep(25)
+        sl.setValue(int(value))
+        sl.setStyleSheet(
+            f"QSlider::groove:horizontal {{ height: 4px; background: {C.BORDER}; border-radius: 2px; }}"
+            f"QSlider::sub-page:horizontal {{ background: {C.PRI_DIM}; border-radius: 2px; }}"
+            f"QSlider::handle:horizontal {{ background: {C.PRI}; width: 12px; margin: -5px 0; border-radius: 6px; }}")
+        val = self._lbl(f"{int(value)}{suffix}", 9, True)
+        val.setFixedWidth(52)
+        sl.valueChanged.connect(lambda v, l=val: l.setText(f"{v}{suffix}"))
+        lay.addWidget(sl, 1)
+        lay.addWidget(val)
+        self._w[key] = sl
+        self._field(key + "_row", label, box)
+        return sl
+
+    def _on_search_provider(self):
+        prov = self._val("search_provider") or "auto"
+        for key, owner in (("tavily_key", "tavily"), ("brave_key", "brave"), ("serper_key", "serper"),
+                           ("searxng_url", "searxng")):
+            row = self._rows.get(key + "_row")
+            if row is not None:
+                row.setVisible(prov == owner)
+
+    def _open_cctv(self):
+        win = self.window()
+        if hasattr(win, "_open_cctv"):
+            self.hide()
+            win._open_cctv()
+
+    def _show_learned(self):
+        try:
+            from core import knowledge
+            st = knowledge.store()
+            st.load()
+            facts = st.recent(400)
+            if not facts:
+                self._on_status("learn", "Nothing learned yet — it learns while idle, every few minutes.", True)
+                return
+            text = "\n".join(f"• {f['text']}  [{f.get('kind', 'fact')}, ×{f.get('count', 1)}, "
+                             f"{f.get('last', '')[:10]}]" for f in facts)
+            win = self.window()
+            if hasattr(win, "_content_sig"):
+                win._content_sig.emit(f"LEARNED — {len(st.facts)} FACTS", text)
+            self._on_status("learn", f"{len(st.facts)} facts — shown in the content panel.", True)
+        except Exception as e:
+            self._on_status("learn", f"Could not read the knowledge: {e}", False)
+
+    def _forget_learned(self):
+        if not getattr(self, "_forget_armed", False):
+            self._forget_armed = True
+            self._on_status("learn", "Press FORGET ALL LEARNED again to erase everything it learned.", False)
+            return
+        self._forget_armed = False
+        try:
+            from core import knowledge
+            n = knowledge.store().clear()
+            self._on_status("learn", f"Forgot {n} learned facts.", True)
+        except Exception as e:
+            self._on_status("learn", f"Could not clear: {e}", False)
+
     def _btn(self, text, primary=False):
         b = QPushButton(text)
         b.setFixedHeight(32 if primary else 28)
@@ -378,6 +535,8 @@ class BrainSettingsOverlay(QWidget):
             return data if data is not None else w.currentText()
         if isinstance(w, QPushButton):
             return w.isChecked()
+        if isinstance(w, QSlider):
+            return w.value()
         return None
 
     # ── behaviour ────────────────────────────────────────────────────────────
@@ -474,7 +633,7 @@ class BrainSettingsOverlay(QWidget):
             c.addItems(names)
             c.setCurrentText(cur)
         if self._provider() == "ollama" and self._rec:
-            missing = [m for m in (self._rec["model"], self._rec["vision_model"]) if m not in names]
+            missing = [m for m in (self._rec["model"], self._rec["vision_model"]) if m and m not in names]
             tail = f" Suggested but not downloaded: {', '.join(missing)} (type one and press ⬇)." if missing else ""
         else:
             tail = ""
@@ -530,6 +689,8 @@ class BrainSettingsOverlay(QWidget):
                 tts.load()
                 name = brain_config.assistant_name().title()
                 audio = np.concatenate(list(tts.synth(f"Hello, I am {name}. All systems are online.")))
+                from core import audio_fx
+                audio = audio_fx.apply_gain(audio.astype(np.int16), float(self._val("voice_volume") or 100))
                 sd.play(audio.astype(np.float32) / 32768.0, 24000)
                 sd.wait()
                 self._status_sig.emit("voice", f"✓ {tts.name} voice works.", True)
@@ -574,7 +735,13 @@ class BrainSettingsOverlay(QWidget):
             "elevenlabs_api_key": self._val("elevenlabs_api_key"),
             "elevenlabs_voice_id": self._val("elevenlabs_voice_id"),
             "tts_rate": int(self._val("tts_rate") or 0),
+            "voice_volume": int(self._val("voice_volume") if self._val("voice_volume") is not None else 100),
         })
+        try:
+            from core import audio_fx
+            audio_fx.set_volume_percent(self._val("voice_volume") if self._val("voice_volume") is not None else 100)
+        except Exception:
+            pass
 
     def _save(self):
         p = self._provider()
@@ -603,7 +770,23 @@ class BrainSettingsOverlay(QWidget):
         self._save_voice()
         brain_config.save_senses({k: self._val(k) for k in (
             "listen_mode", "barge_in", "voice_confirm", "journal", "face_presence", "owner_only",
-            "greet_on_arrival", "lock_on_leave", "alert_unknown_faces")})
+            "greet_on_arrival", "lock_on_leave", "alert_unknown_faces", "live_vision", "vision_proactive",
+            "vision_captions", "vision_attach", "vision_preview")})
+        brain_config.save_senses({"vision_fps": float(self._val("vision_fps") or 2),
+                                  "vision_caption_seconds": int(self._val("vision_caption_seconds") or 60),
+                                  "live_video_seconds": int(self._val("live_video_seconds") or 3)})
+        brain_config.save_search_cfg({
+            "auto_search": self._val("auto_search"), "google_ai": self._val("google_ai"),
+            "provider": self._val("search_provider") or "auto",
+            "tavily_key": self._val("tavily_key"), "brave_key": self._val("brave_key"),
+            "serper_key": self._val("serper_key"), "searxng_url": self._val("searxng_url"),
+            "region": self._val("search_region") or "auto", "read_pages": self._val("read_pages")})
+        brain_config.save_learning_cfg({
+            "enabled": self._val("learn_enabled"), "from_room": self._val("learn_room"),
+            "from_camera": self._val("learn_camera"), "from_screen": self._val("learn_screen"),
+            "from_tools": self._val("learn_tools"),
+            "consolidate_minutes": int(self._val("consolidate_minutes") or 10),
+            "embed_model": self._val("embed_model") or ""})
         token = self._val("telegram_token")
         try:
             from core import telegram_bridge

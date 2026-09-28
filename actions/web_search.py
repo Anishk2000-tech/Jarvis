@@ -241,7 +241,14 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
 # ── Modes ──────────────────────────────────────────────────────────────────────
 
 def _search(query: str) -> str:
-    """Default search — Gemini grounded, DDG fallback."""
+    """Default search: several engines, the top pages read, the passages that
+    answer kept — plus Google's AI answer when a Gemini key is set
+    (core/websearch.py). Falls back to the old Gemini/DDG path on any failure."""
+    try:
+        from core import websearch
+        return websearch.research(query, "search")
+    except Exception as e:
+        print(f"[WebSearch] research pipeline failed ({e}) — plain search instead")
     try:
         return _gemini_search(query)
     except Exception as e:
@@ -289,6 +296,11 @@ def _research(query: str) -> str:
     Deep dive — asks Gemini for a comprehensive answer with context.
     Falls back to a wider DDG fetch.
     """
+    try:
+        from core import websearch
+        return websearch.research(query, "research", deadline=22.0)
+    except Exception as e:
+        print(f"[WebSearch] research pipeline failed ({e})")
     research_query = (
         f"Comprehensive, detailed explanation of: {query}. "
         "Include background context, key facts, current state, and important nuances."
@@ -303,6 +315,11 @@ def _research(query: str) -> str:
 
 def _price(query: str) -> str:
     """Product price lookup — searches for current market prices."""
+    try:
+        from core import websearch
+        return websearch.research(f"{query} price today", "search")
+    except Exception as e:
+        print(f"[WebSearch] research pipeline failed ({e})")
     price_query = f"current price of {query} — how much does it cost today"
     try:
         return _gemini_search(price_query)
@@ -313,6 +330,11 @@ def _price(query: str) -> str:
 
 
 def _compare(items: list[str], aspect: str) -> str:
+    try:
+        from core import websearch
+        return websearch.research(f"{' vs '.join(items)} {aspect} comparison", "research", deadline=20.0)
+    except Exception as e:
+        print(f"[WebSearch] research pipeline failed ({e})")
     query = (
         f"Compare {', '.join(items)} in terms of {aspect}. "
         "Give specific facts and data."
@@ -384,7 +406,7 @@ def web_search(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "web_search",
-    "description": "Searches the web. Use for ANY question about current facts, events, prices, or topics — always prefer this over guessing. Modes: 'search' (default), 'news' (latest headlines on a topic), 'research' (deep comprehensive answer), 'price' (product cost lookup), 'compare' (side-by-side comparison of items).",
+    "description": "Searches the web and reads the top pages (plus Google's AI answer when available). Use for ANY question about current facts, events, prices, people, or anything you are not sure of — never guess and never say you cannot browse. Modes: 'search' (default), 'news' (latest headlines on a topic), 'research' (deeper, more pages), 'price' (product cost lookup), 'compare' (side-by-side comparison of items).",
     "parameters": {
         "type": "OBJECT",
         "properties": {

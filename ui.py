@@ -53,7 +53,7 @@ from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
     QGraphicsScene, QGraphicsView,
-    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
+    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar, QSlider,
 )
 
 try:
@@ -1398,6 +1398,73 @@ class _CameraPreview(QWidget):
         self.show()
         self.raise_()
         self._timer.start(6_000)   # auto-dismiss after 6 s
+
+
+class _LivePip(QWidget):
+    """Live vision's own window on the HUD: what the webcam sees, with the
+    detector's boxes and the names face recognition put on people."""
+
+    _W = 250
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            _LivePip {{
+                background: rgba(0, 6, 10, 235);
+                border: 1px solid {C.PRI_DIM};
+                border-radius: 6px;
+            }}
+        """)
+        self.setFixedWidth(self._W)
+        self.dismissed = False
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(6, 4, 6, 6)
+        lay.setSpacing(3)
+        hdr = QHBoxLayout()
+        title = QLabel("👁  LIVE VISION")
+        title.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        hdr.addWidget(title)
+        hdr.addStretch()
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(16, 16)
+        close_btn.setFont(QFont("Courier New", 8))
+        close_btn.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setToolTip("Hide the view (live vision keeps running)")
+        close_btn.clicked.connect(self._dismiss)
+        hdr.addWidget(close_btn)
+        lay.addLayout(hdr)
+        self._img = QLabel()
+        self._img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._img.setStyleSheet("background: transparent;")
+        lay.addWidget(self._img)
+        self._txt = QLabel("")
+        self._txt.setWordWrap(True)
+        self._txt.setFont(QFont("Courier New", 7))
+        self._txt.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        lay.addWidget(self._txt)
+        self.hide()
+
+    def _dismiss(self):
+        self.dismissed = True
+        self.hide()
+
+    def show_frame(self, data: bytes, summary: str) -> None:
+        if self.dismissed:
+            return
+        px = QPixmap()
+        px.loadFromData(data)
+        if not px.isNull():
+            scaled = px.scaled(self._W - 12, 170, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+            self._img.setPixmap(scaled)
+            self._img.setFixedSize(scaled.width(), scaled.height())
+        self._txt.setText(summary or "")
+        self.adjustSize()
+        self.show()
+        self.raise_()
 
 
 class SetupOverlay(QWidget):
@@ -2968,6 +3035,8 @@ class MainWindow(QMainWindow):
     _quiz_sig       = pyqtSignal(str, object, object)  # (topic, questions, grader)
     _quiz_hide_sig  = pyqtSignal()
     _review_sig     = pyqtSignal(str, str, object, object)  # document review payload
+    _vision_sig     = pyqtSignal(bytes, str)  # live vision frame + scene summary
+    _cctv_sig       = pyqtSignal()            # open the camera wall from any thread
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -3251,10 +3320,14 @@ class MainWindow(QMainWindow):
         self._quiz_sig.connect(self._show_quiz)
         self._quiz_hide_sig.connect(self._hide_quiz)
         self._review_sig.connect(self._show_review)
+        self._vision_sig.connect(self._show_vision_frame)
+        self._cctv_sig.connect(self._open_cctv)
         self._cam_stop = threading.Event()
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
         self._cam_preview = _CameraPreview(self.centralWidget())
+        self._live_pip = _LivePip(self.centralWidget())
+        self._cctv_wall = None
 
         # Clipboard panel (child of central widget, bottom-center)
         self._clipboard_panel = ClipboardPanel(self.centralWidget())
@@ -3274,6 +3347,35 @@ class MainWindow(QMainWindow):
         sc_full.activated.connect(self._toggle_fullscreen)
         sc_intr = QShortcut(QKeySequence("Escape"), self)
         sc_intr.activated.connect(self._do_interrupt)
+
+    def _show_vision_frame(self, data: bytes, summary: str):
+        """Slot — live vision's picture-in-picture, bottom-left of the HUD."""
+        try:
+            from core import brain_config
+            senses = brain_config.get_senses()
+            if not senses.get("live_vision") or not senses.get("vision_preview", True):
+                self._live_pip.hide()
+                return
+        except Exception:
+            pass
+        self._live_pip.show_frame(data, summary)
+        self._position_live_pip()
+
+    def _position_live_pip(self):
+        cw = self.centralWidget()
+        ph = self._live_pip.sizeHint().height()
+        self._live_pip.setGeometry(_LEFT_W + 12, cw.height() - ph - 28, _LivePip._W, ph)
+
+    def _open_cctv(self):
+        from ui_cctv import CameraWallOverlay
+        self._close_setup()
+        self._close_controls()
+        cw = self.centralWidget()
+        if self._cctv_wall is None:
+            self._cctv_wall = CameraWallOverlay(cw)
+        m = 16
+        self._cctv_wall.setGeometry(m, 50, cw.width() - 2 * m, cw.height() - 50 - m)
+        self._cctv_wall.open_wall()
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""
@@ -3878,6 +3980,10 @@ class MainWindow(QMainWindow):
             cw.height() - ph - 28,
             pw, ph,
         )
+        if hasattr(self, '_live_pip') and self._live_pip.isVisible():
+            self._position_live_pip()
+        if getattr(self, '_cctv_wall', None) is not None and self._cctv_wall.isVisible():
+            self._cctv_wall.setGeometry(16, 50, cw.width() - 32, cw.height() - 66)
         # Clipboard panel — bottom-center
         if hasattr(self, '_clipboard_panel') and self._clipboard_panel.isVisible():
             self._position_clipboard_panel()
@@ -4317,6 +4423,46 @@ class MainWindow(QMainWindow):
         self._listen_btn = _row(QPushButton())
         self._listen_btn.clicked.connect(self._toggle_listen_mode)
         self._refresh_listen_btn()
+
+        self._vision_btn = _row(QPushButton())
+        self._vision_btn.clicked.connect(self._toggle_live_vision)
+        self._refresh_vision_btn()
+
+        cctv_btn = _row(QPushButton("📹  CCTV CAMERAS"), self._BTN_DIM)
+        cctv_btn.clicked.connect(self._open_cctv)
+
+        # The assistant's own volume, 0–200 % (core/audio_fx.py).
+        vol_row = QWidget()
+        vol_row.setStyleSheet("background: transparent;")
+        vl = QHBoxLayout(vol_row)
+        vl.setContentsMargins(0, 2, 0, 2)
+        vl.setSpacing(6)
+        self._vol_lbl = QLabel()
+        self._vol_lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._vol_lbl.setFixedWidth(84)
+        self._vol_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        self._vol_slider = QSlider(Qt.Orientation.Horizontal)
+        self._vol_slider.setRange(0, 200)
+        self._vol_slider.setSingleStep(5)
+        self._vol_slider.setPageStep(25)
+        self._vol_slider.setToolTip("My voice volume — above 100% is a boost, like VLC")
+        self._vol_slider.setStyleSheet(
+            f"QSlider::groove:horizontal {{ height: 4px; background: {C.BORDER}; border-radius: 2px; }}"
+            f"QSlider::sub-page:horizontal {{ background: {C.PRI_DIM}; border-radius: 2px; }}"
+            f"QSlider::handle:horizontal {{ background: {C.PRI}; width: 10px; margin: -5px 0; border-radius: 5px; }}")
+        try:
+            from core import audio_fx
+            self._vol_slider.setValue(int(audio_fx.volume_percent(max_age=0)))
+        except Exception:
+            self._vol_slider.setValue(100)
+        self._vol_timer = QTimer(self)
+        self._vol_timer.setSingleShot(True)
+        self._vol_timer.timeout.connect(self._save_voice_volume)
+        self._vol_slider.valueChanged.connect(self._on_vol_slider)
+        self._on_vol_slider(self._vol_slider.value(), save=False)
+        vl.addWidget(self._vol_lbl)
+        vl.addWidget(self._vol_slider, 1)
+        lay.addWidget(vol_row)
 
         self._wake_btn = _row(QPushButton())
         self._wake_btn.clicked.connect(self._toggle_wake_word)
@@ -5638,6 +5784,18 @@ class MainWindow(QMainWindow):
         if ov is not None:
             ov.hide()
         self._refresh_listen_btn()
+        self._refresh_vision_btn()
+        self._apply_live_vision()
+        self._apply_learning()
+        try:
+            from core import audio_fx
+            if hasattr(self, "_vol_slider"):
+                self._vol_slider.blockSignals(True)
+                self._vol_slider.setValue(int(audio_fx.volume_percent(max_age=0)))
+                self._vol_slider.blockSignals(False)
+                self._on_vol_slider(self._vol_slider.value(), save=False)
+        except Exception:
+            pass
         try:
             from core import brain_config, face_id
             if brain_config.get_senses().get("face_presence"):
@@ -5677,6 +5835,72 @@ class MainWindow(QMainWindow):
         self._log.append_log(
             f"SYS: Ambient listening — I hear the room and answer when you say '{name}'."
             if new == "ambient" else "SYS: Active listening — I answer everything I hear.")
+
+
+    def _on_vol_slider(self, value: int, save: bool = True):
+        v = int(value)
+        boost = v > 100
+        self._vol_lbl.setText(f"🔊 VOICE {v}%")
+        self._vol_lbl.setStyleSheet(f"color: {C.ACC2 if boost else C.TEXT_MED}; background: transparent;")
+        if save:
+            self._vol_timer.start(250)
+
+    def _save_voice_volume(self):
+        try:
+            from core import audio_fx
+            audio_fx.set_volume_percent(self._vol_slider.value())
+        except Exception as e:
+            self._log.append_log(f"ERR: Voice volume — {e}")
+
+    def _refresh_vision_btn(self):
+        if not hasattr(self, "_vision_btn"):
+            return
+        try:
+            from core import brain_config
+            on = bool(brain_config.get_senses().get("live_vision"))
+        except Exception:
+            on = False
+        self._vision_btn.setText("👁  LIVE VISION: ON" if on else "👁  LIVE VISION: OFF")
+        self._vision_btn.setStyleSheet(self._BTN_PRI if on else self._BTN_DIM)
+
+    def _toggle_live_vision(self):
+        from core import brain_config
+        on = not bool(brain_config.get_senses().get("live_vision"))
+        brain_config.save_senses({"live_vision": on})
+        self._apply_live_vision()
+        self._refresh_vision_btn()
+
+    def _apply_live_vision(self):
+        """Start or stop the webcam watcher to match the settings."""
+        try:
+            from core import brain_config, perception
+            per = perception.perception()
+            if brain_config.get_senses().get("live_vision"):
+                per.on_frame = lambda data, summary: self._vision_sig.emit(data, summary)
+                self._live_pip.dismissed = False
+                per.start(log=self._log_sig.emit)
+            else:
+                per.stop()
+                self._live_pip.hide()
+        except Exception as e:
+            self._log.append_log(f"ERR: Live vision — {e}")
+
+    def _apply_learning(self):
+        try:
+            import sys as _s
+            from core import brain_config, knowledge
+            cfg = brain_config.get_learning_cfg()
+            if cfg.get("enabled", True):
+                knowledge.learner().start(log=self._log_sig.emit)
+                if cfg.get("from_screen", True) and _s.platform == "win32":
+                    knowledge.screen_activity().start()
+                else:
+                    knowledge.screen_activity().stop()
+            else:
+                knowledge.learner().stop()
+                knowledge.screen_activity().stop()
+        except Exception as e:
+            self._log.append_log(f"ERR: Learning — {e}")
 
 
 class _RootShim:
@@ -5929,6 +6153,14 @@ class JarvisUI:
 
     def video_is_playing(self) -> bool:
         return bool(self._win.video_is_playing())
+
+    def show_vision_frame(self, jpeg: bytes, summary: str = "") -> None:
+        """Thread-safe: live vision's annotated frame for the HUD corner."""
+        self._win._vision_sig.emit(bytes(jpeg or b""), str(summary or ""))
+
+    def open_cctv(self) -> None:
+        """Thread-safe: open the CCTV camera wall."""
+        self._win._cctv_sig.emit()
 
     def start_camera_stream(self) -> None:
         """Thread-safe: start live camera feed in the full HUD area."""

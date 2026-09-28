@@ -574,6 +574,37 @@ def _start_face_presence(engine) -> None:
         face_id.presence().start(log=engine.ui.write_log)
 
 
+def _start_live_vision(engine) -> None:
+    """The webcam stays open and the assistant keeps looking (core/perception.py)."""
+    from core import brain_config, perception
+    per = perception.perception()
+    show = getattr(engine.ui, "show_vision_frame", None)
+    if show is not None:
+        per.on_frame = show
+    if brain_config.get_senses().get("live_vision"):
+        per.start(log=engine.ui.write_log)
+
+
+def _start_cctv(engine) -> None:
+    """Security cameras (core/cctv.py): watched while a mode other than off is set."""
+    from core import cctv
+    data = cctv.load_cfg()
+    mgr = cctv.manager()
+    if data["cameras"] and data["mode"] != "off":
+        mgr.start(log=engine.ui.write_log)
+        engine.ui.write_log(f"SYS: 📹 Watching {len(data['cameras'])} camera(s) — mode {data['mode']}.")
+
+
+def _start_learning(engine) -> None:
+    """Distil what was seen, heard and done into lasting knowledge (core/knowledge.py)."""
+    from core import brain_config, knowledge
+    cfg = brain_config.get_learning_cfg()
+    if cfg.get("enabled", True):
+        knowledge.learner().start(log=engine.ui.write_log)
+        if cfg.get("from_screen", True) and _sys.platform == "win32":
+            knowledge.screen_activity().start()
+
+
 class _ReconnectSignal(Exception):
     """Raised inside the session TaskGroup to force a clean, voluntary reconnect
     (e.g. the user picked a new voice — the voice is fixed at connect time, so
@@ -1417,6 +1448,30 @@ class JarvisLive:
                 )
             )
 
+    async def _stream_live_video(self):
+        """Live vision with Gemini Live: send the webcam as video, a frame every
+        few seconds, so the realtime model sees what is in front of it."""
+        from core import brain_config, perception
+        per = perception.perception()
+        warned = False
+        while True:
+            senses = brain_config.get_senses()
+            period = max(1.0, float(senses.get("live_video_seconds", 3) or 3))
+            await asyncio.sleep(period)
+            if not senses.get("live_vision") or not per.running() or self.session is None:
+                continue
+            jpeg = await asyncio.to_thread(per.latest_jpeg, 640, 70)
+            if not jpeg:
+                continue
+            try:
+                await self.session.send_realtime_input(
+                    video=types.Blob(data=jpeg, mime_type="image/jpeg"))
+            except Exception as e:
+                if not warned:
+                    warned = True
+                    print(f"[Vision] live video not accepted by this session: {e}")
+                await asyncio.sleep(30)
+
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
@@ -1758,6 +1813,11 @@ class JarvisLive:
         except Exception:
             pass
 
+        # The assistant's own volume, 0–200 % (⚙ → AI BRAIN & VOICE, or "speak
+        # louder"). Applied here so both engines and every voice get it.
+        from core import audio_fx
+        _limiter = audio_fx.VoiceLimiter(RECEIVE_SAMPLE_RATE)
+
         try:
             while True:
                 try:
@@ -1791,6 +1851,13 @@ class JarvisLive:
                 # own voice. The batch is up to 200 ms long, so we hand over a
                 # *schedule* of 20 ms viseme frames instead of a single averaged
                 # level and let the HUD play it out in step with the audio.
+                _pct = audio_fx.volume_percent()
+                try:
+                    out_pcm = _limiter.process(bytes(batch), _pct)
+                except Exception:
+                    out_pcm = np.frombuffer(bytes(batch), dtype=np.int16)
+                _gain = min(1.0, _pct / 100.0) if _pct < 100 else 1.0
+
                 try:
                     pcm = np.frombuffer(bytes(batch), dtype=np.int16)
                     hop = _VIS_HOP / RECEIVE_SAMPLE_RATE
@@ -1826,19 +1893,19 @@ class JarvisLive:
                         self.ui.push_visemes(frames, hop, at)
                         # Barge-in needs to know what we are playing, not just
                         # how loud: the guard subtracts this from the microphone.
-                        self._out_level = max(f[0] for f in frames)
-                        self._echo.note_output(pcm, RECEIVE_SAMPLE_RATE,
+                        self._out_level = max(f[0] for f in frames) * _gain
+                        self._echo.note_output(out_pcm, RECEIVE_SAMPLE_RATE,
                                                self._out_level)
                     else:
                         lvl = _pcm_level(pcm)
                         self.ui.set_audio_level(lvl)
-                        self._out_level = lvl
-                        self._echo.note_output(pcm, RECEIVE_SAMPLE_RATE, lvl)
+                        self._out_level = lvl * _gain
+                        self._echo.note_output(out_pcm, RECEIVE_SAMPLE_RATE, self._out_level)
                 except Exception:
                     pass
 
                 try:
-                    await asyncio.to_thread(stream.write, bytes(batch))
+                    await asyncio.to_thread(stream.write, out_pcm.tobytes())
                 except (RuntimeError, asyncio.CancelledError):
                     break   # executor shutting down — exit cleanly
         except Exception as e:
@@ -2216,7 +2283,9 @@ class JarvisLive:
 
         # ── Extensions added by this fork: each is optional and off-thread ──
         for _name, _starter in (("MCP", _start_mcp), ("Telegram", _start_telegram),
-                                ("Face presence", _start_face_presence)):
+                                ("Face presence", _start_face_presence),
+                                ("Live vision", _start_live_vision), ("CCTV", _start_cctv),
+                                ("Learning", _start_learning)):
             try:
                 _starter(self)
             except Exception as _e:
@@ -2339,6 +2408,7 @@ class JarvisLive:
                     self._reconnect_event.clear()  # ignore requests from before this session
                     tg.create_task(self._watch_reconnect())
                     tg.create_task(self._send_realtime())
+                    tg.create_task(self._stream_live_video())
                     tg.create_task(self._listen_audio())
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
