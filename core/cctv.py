@@ -239,12 +239,16 @@ def grab_once(url: str, timeout: float = 12.0):
         cap.release()
 
 
-def _open_capture(url: str, timeout: float = 10.0):
+def _open_capture(url: str, timeout: float = 10.0, hw: bool = False):
+    """Open a network stream through FFmpeg. Decoding stays on the CPU unless
+    the camera is set to hw_decode: sub-streams are cheap, and GPU decoding
+    through some Windows drivers fails in the middle of a stream."""
     import cv2
     params = []
+    accel = getattr(cv2, "VIDEO_ACCELERATION_ANY", None) if hw else None
     for prop, val in (("CAP_PROP_OPEN_TIMEOUT_MSEC", int(timeout * 1000)),
                       ("CAP_PROP_READ_TIMEOUT_MSEC", int(timeout * 1000)),
-                      ("CAP_PROP_HW_ACCELERATION", getattr(cv2, "VIDEO_ACCELERATION_ANY", None))):
+                      ("CAP_PROP_HW_ACCELERATION", accel)):
         pid = getattr(cv2, prop, None)
         if pid is not None and val is not None:
             params += [pid, val]
@@ -328,7 +332,7 @@ class Feed:
                     idx = int(re.sub(r"\D", "", url) or 0)
                     cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY)
                 else:
-                    cap = _open_capture(url)
+                    cap = _open_capture(url, hw=bool(self.cam.get("hw_decode")))
                 if not cap.isOpened():
                     raise RuntimeError("stream did not open (address, port, user or password wrong?)")
                 last_ret, fails = 0.0, 0

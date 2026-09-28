@@ -112,6 +112,12 @@ _COMMAND = re.compile(
     r"download|install|delete|move|copy|rename)\b", re.I)
 
 
+def is_question(text: str) -> bool:
+    """A request for information, not a command to do something."""
+    t = (text or "").strip()
+    return bool(_QUESTION.search(t)) and not _COMMAND.search(t)
+
+
 def needs_fresh_info(text: str) -> bool:
     """A question about the present that the model cannot answer from training."""
     t = (text or "").strip()

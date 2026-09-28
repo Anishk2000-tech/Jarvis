@@ -1453,8 +1453,7 @@ class JarvisLive:
         few seconds, so the realtime model sees what is in front of it."""
         from core import brain_config, perception
         per = perception.perception()
-        warned = False
-        while True:
+        while not getattr(self, "_live_video_refused", False):
             senses = brain_config.get_senses()
             period = max(1.0, float(senses.get("live_video_seconds", 3) or 3))
             await asyncio.sleep(period)
@@ -1467,10 +1466,15 @@ class JarvisLive:
                 await self.session.send_realtime_input(
                     video=types.Blob(data=jpeg, mime_type="image/jpeg"))
             except Exception as e:
-                if not warned:
-                    warned = True
-                    print(f"[Vision] live video not accepted by this session: {e}")
-                await asyncio.sleep(30)
+                # Not for this model: stop trying for the rest of the run rather
+                # than risk a reconnect loop. Live vision's scene summaries and
+                # the vision tool still work.
+                self._live_video_refused = True
+                print(f"[Vision] live video not accepted by this session: {e}")
+                self.ui.write_log("SYS: This Gemini Live model does not take video — live vision "
+                                  "continues through descriptions.")
+        while True:
+            await asyncio.sleep(3600)
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")

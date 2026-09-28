@@ -964,6 +964,9 @@ class LocalEngineMixin:
         images = list(req.images)
         search_cfg = brain_config.get_search_cfg()
         auto_search = bool(search_cfg.get("auto_search", True)) and from_user
+        # "I'm not sure" after a question means it does not know; after a
+        # command it is usually a clarifying question — nothing to search.
+        unsure_search = auto_search and websearch.is_question(req.text)
         searched = False
 
         # Eyes: a visual question gets the live webcam frame.
@@ -1008,7 +1011,7 @@ class LocalEngineMixin:
                         for sentence in stream.feed(ev.text):
                             if unsure:
                                 continue
-                            if auto_search and not searched and websearch.sounds_unsure(sentence):
+                            if unsure_search and not searched and websearch.sounds_unsure(sentence):
                                 unsure = True       # hold it back: we will look it up instead
                                 continue
                             spoken_all.append(sentence)
@@ -1033,7 +1036,7 @@ class LocalEngineMixin:
                         self._history.pop()
                 return msg
             tail = stream.flush()
-            if not unsure and auto_search and not searched and any(websearch.sounds_unsure(t) for t in tail):
+            if not unsure and unsure_search and not searched and any(websearch.sounds_unsure(t) for t in tail):
                 unsure = True
             if final_ev is None or final_ev.cancelled:
                 if not unsure:
@@ -1048,7 +1051,7 @@ class LocalEngineMixin:
 
             text = llm.strip_thinking(visible_text(final_ev.text))
             calls = final_ev.tool_calls
-            if not calls and (unsure or (auto_search and not searched and websearch.sounds_unsure(text))):
+            if not calls and (unsure or (unsure_search and not searched and websearch.sounds_unsure(text))):
                 # The model does not know. Instead of passing that on, search
                 # and let it answer again from what the web says.
                 searched = True

@@ -153,3 +153,10 @@ def test_research_reports_nothing(monkeypatch, tmp_path):
     monkeypatch.setattr(websearch, "_wikipedia", lambda q: "")
     out = websearch.research("who won the world cup yesterday")
     assert "found nothing" in out and "do not guess" in out
+
+
+def test_is_question():
+    assert websearch.is_question("Who runs Acme Widgets?")
+    assert websearch.is_question("capital of peru kya hai")
+    assert not websearch.is_question("play some relaxing music")
+    assert not websearch.is_question("open notepad and write hello")

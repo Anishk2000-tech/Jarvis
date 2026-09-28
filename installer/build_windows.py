@@ -262,7 +262,7 @@ def build_installer(version: str) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", default=f"56.0.{os.environ.get('GITHUB_RUN_NUMBER', '0')}")
+    ap.add_argument("--version", default=f"57.0.{os.environ.get('GITHUB_RUN_NUMBER', '0')}")
     ap.add_argument("--skip-installer", action="store_true", help="stage only, do not run NSIS")
     ap.add_argument("--reuse-python", action="store_true", help="keep an already staged python/")
     args = ap.parse_args()
